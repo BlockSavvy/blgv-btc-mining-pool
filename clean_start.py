@@ -2218,23 +2218,24 @@ def initialize_test_mining_data():
             conn.close()
             return  # Test data already exists
         
-        # Create real test miners with actual data
+        # Create real test miners with actual data and unique usernames
+        session_suffix = session_id[-8:]  # Use last 8 chars of session ID for uniqueness
         test_miners = [
             {
                 'wallet_address': 'bc1test_user_wallet_001',
-                'worker_name': 'test_worker_1',
+                'worker_name': f'test_worker_1_{session_suffix}',
                 'hashrate': 500000000000,  # 0.5 TH/s
                 'status': 'online'
             },
             {
                 'wallet_address': 'bc1test_user_wallet_001',
-                'worker_name': 'test_worker_2', 
+                'worker_name': f'test_worker_2_{session_suffix}', 
                 'hashrate': 300000000000,  # 0.3 TH/s
                 'status': 'online'
             },
             {
                 'wallet_address': 'bc1test_user_wallet_002',
-                'worker_name': 'test_worker_3',
+                'worker_name': f'test_worker_3_{session_suffix}',
                 'hashrate': 200000000000,  # 0.2 TH/s
                 'status': 'online'
             }
@@ -2245,10 +2246,11 @@ def initialize_test_mining_data():
             miner_id = str(uuid.uuid4())
             cursor.execute("""
                 INSERT INTO miners 
-                (id, wallet_address, worker_name, hash_rate, status, is_test_mode, test_session_id, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                (id, username, wallet_address, worker_name, hash_rate, status, is_test_mode, test_session_id, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
             """, (
                 miner_id,
+                miner['worker_name'],  # Use worker_name as username
                 miner['wallet_address'],
                 miner['worker_name'],
                 miner['hashrate'],
