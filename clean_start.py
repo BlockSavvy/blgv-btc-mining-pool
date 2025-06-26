@@ -2197,8 +2197,19 @@ def initialize_test_mining_data():
         
         # Check if test data already exists for this session
         session_id = get_test_session_id()
+        
+        # First ensure test mode columns exist
+        try:
+            cursor.execute("ALTER TABLE miners ADD COLUMN IF NOT EXISTS is_test_mode BOOLEAN DEFAULT FALSE")
+            cursor.execute("ALTER TABLE miners ADD COLUMN IF NOT EXISTS test_session_id VARCHAR(50)")
+            cursor.execute("ALTER TABLE miners ADD COLUMN IF NOT EXISTS worker_name VARCHAR(100)")
+            cursor.execute("ALTER TABLE miners ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'online'")
+            conn.commit()
+        except Exception as e:
+            logger.debug(f"Columns might already exist: {e}")
+        
         cursor.execute("""
-            SELECT COUNT(*) FROM pool_miners 
+            SELECT COUNT(*) FROM miners 
             WHERE is_test_mode = true AND test_session_id = %s
         """, (session_id,))
         
@@ -2233,9 +2244,9 @@ def initialize_test_mining_data():
         for miner in test_miners:
             miner_id = str(uuid.uuid4())
             cursor.execute("""
-                INSERT INTO pool_miners 
-                (id, wallet_address, worker_name, hashrate, status, is_test_mode, test_session_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO miners 
+                (id, wallet_address, worker_name, hash_rate, status, is_test_mode, test_session_id, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
             """, (
                 miner_id,
                 miner['wallet_address'],
@@ -2330,16 +2341,16 @@ def stats():
             if is_test_mode():
                 # Show all miners including test data
                 cursor.execute("""
-                    SELECT COUNT(*), COALESCE(SUM(hashrate), 0)
-                    FROM pool_miners 
+                    SELECT COUNT(*), COALESCE(SUM(hash_rate), 0)
+                    FROM miners 
                     WHERE status = 'online'
                 """)
             else:
                 # Production: exclude test miners
                 cursor.execute("""
-                    SELECT COUNT(*), COALESCE(SUM(hashrate), 0)
-                    FROM pool_miners 
-                    WHERE status = 'online' AND is_test_mode = false
+                    SELECT COUNT(*), COALESCE(SUM(hash_rate), 0)
+                    FROM miners 
+                    WHERE status = 'online' AND (is_test_mode = false OR is_test_mode IS NULL)
                 """)
             
             result = cursor.fetchone()
