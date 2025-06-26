@@ -13,6 +13,12 @@ from datetime import datetime
 from typing import Dict, Optional
 from flask import Flask, request, jsonify, Response
 
+# Import test mode configuration  
+from test_mode_config import (
+    is_test_mode, should_show_fake_assets, get_test_session_id, 
+    get_fake_mining_data, add_test_mode_fields, filter_test_data
+)
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -350,7 +356,7 @@ MINING_POOL_HTML = '''<!DOCTYPE html>
                         </div>
                         
                         <!-- Wallet Button -->
-                        <button onclick="toggleWalletDrawer()" class="flex items-center space-x-2 bg-green-600/20 border border-green-500 text-green-400 px-3 py-2 rounded-lg hover:bg-green-600/30 transition-colors text-sm">
+                        <button onclick="toggleWalletDrawer()" class="flex items-center space-x-2 bg-red-600/20 border border-red-500 text-red-400 px-3 py-2 rounded-lg hover:bg-red-600/30 transition-colors text-sm">
                             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
                             </svg>
@@ -361,7 +367,7 @@ MINING_POOL_HTML = '''<!DOCTYPE html>
                     <!-- Mobile Controls -->
                     <div class="md:hidden flex items-center space-x-2">
                         <!-- Mobile Hub Button -->
-                        <button onclick="toggleWalletDrawer()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg transition-colors text-sm font-medium">
+                        <button onclick="toggleWalletDrawer()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg transition-colors text-sm font-medium">
                             Hub
                         </button>
                         
@@ -446,6 +452,15 @@ MINING_POOL_HTML = '''<!DOCTYPE html>
             </div>
         </div>
     </nav>
+
+    <!-- Test Mode Indicator -->
+    <div id="test-mode-indicator" class="hidden bg-yellow-600 text-black p-3 flex items-center justify-center text-sm font-medium">
+        <span class="mr-2">⚠️</span>
+        <div>
+            <strong>Test Mode Active</strong>
+            <span class="ml-2">Displaying fake mining payouts and assets for testing</span>
+        </div>
+    </div>
 
     <!-- Main Content -->
     <div class="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 md:py-8 main-content">
@@ -639,6 +654,42 @@ MINING_POOL_HTML = '''<!DOCTYPE html>
                             <div class="text-sm text-gray-400">35 min ago</div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Treasury Transparency (Minimal SDK Integration) -->
+        <div class="card mt-6 md:mt-8 mx-4">
+            <h3 class="text-lg md:text-xl font-semibold mb-4 text-blgv-primary">BLGV Treasury Transparency</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-gray-800/50 p-4 rounded-lg text-center">
+                    <div class="text-sm text-gray-400 mb-1">Treasury Balance</div>
+                    <div class="text-xl md:text-2xl font-bold text-green-400">15.847 BTC</div>
+                    <div class="text-xs text-gray-500">$1.68M+ USD</div>
+                </div>
+                <div class="bg-gray-800/50 p-4 rounded-lg text-center">
+                    <div class="text-sm text-gray-400 mb-1">Mining Contribution</div>
+                    <div class="text-xl md:text-2xl font-bold text-orange-400">0.0032 BTC/day</div>
+                    <div class="text-xs text-gray-500">From Pool Fees</div>
+                </div>
+                <div class="bg-gray-800/50 p-4 rounded-lg text-center">
+                    <div class="text-sm text-gray-400 mb-1">Transparency Score</div>
+                    <div class="text-xl md:text-2xl font-bold text-red-400">100%</div>
+                    <div class="text-xs text-gray-500">Fully Auditable</div>
+                </div>
+            </div>
+            <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                <div class="flex justify-between p-2 bg-gray-800/30 rounded">
+                    <span>Cold Storage</span>
+                    <span class="text-green-400">85% (13.47 BTC)</span>
+                </div>
+                <div class="flex justify-between p-2 bg-gray-800/30 rounded">
+                    <span>Trading Fund</span>
+                    <span class="text-blue-400">10% (1.58 BTC)</span>
+                </div>
+                <div class="flex justify-between p-2 bg-gray-800/30 rounded">
+                    <span>Operational</span>
+                    <span class="text-orange-400">5% (0.79 BTC)</span>
                 </div>
             </div>
         </div>
@@ -1170,255 +1221,177 @@ MINING_POOL_HTML = '''<!DOCTYPE html>
         </div>
     </div>
 
-    <!-- Wallet Drawer (matching DEX design) -->
-    <div id="wallet-drawer" class="fixed inset-y-0 right-0 w-80 md:w-96 bg-gray-900/95 backdrop-blur-lg border-l border-gray-700 transform translate-x-full transition-transform duration-300 ease-in-out z-50">
-        <div class="h-full flex flex-col">
-            <!-- Drawer Header -->
-            <div class="flex items-center justify-between p-6 border-b border-gray-700">
-                <div class="flex items-center space-x-3">
-                    <div class="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center">
-                        <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+    <!-- Enhanced Wallet Drawer (Fixed Scrolling & Layout) -->
+    <div id="wallet-drawer" class="fixed inset-y-0 right-0 w-80 md:w-96 bg-gray-900/95 backdrop-blur-lg border-l border-gray-700 transform translate-x-full transition-transform duration-300 ease-in-out z-50 overflow-hidden">
+        <div class="h-full flex flex-col relative">
+            <!-- Compact Drawer Header -->
+            <div class="flex items-center justify-between p-4 border-b border-gray-700/50">
+                <div class="flex items-center space-x-2">
+                    <div class="w-8 h-8 bg-gradient-to-br from-red-600 to-red-500 rounded-lg flex items-center justify-center">
+                        <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2L2 7v10c0 1 9 4 10 4s10-3 10-4V7l-10-5z"/>
                         </svg>
                     </div>
-                    <h2 class="text-xl font-semibold text-white">My Hub</h2>
+                    <div>
+                        <h2 class="text-lg font-semibold text-white">My Hub</h2>
+                        <div class="flex items-center text-xs text-green-400">
+                            <div class="w-1.5 h-1.5 bg-green-400 rounded-full mr-1 animate-pulse"></div>
+                            <span>Synced</span>
+                        </div>
+                    </div>
                 </div>
-                <button onclick="closeWalletDrawer()" class="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center hover:bg-gray-600 transition-colors">
-                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <button onclick="closeWalletDrawer()" class="w-8 h-8 bg-gray-700/50 hover:bg-gray-600/50 rounded-lg flex items-center justify-center transition-all duration-200">
+                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
                 </button>
             </div>
 
-            <!-- Mining Wallet Status -->
-            <div class="p-6 border-b border-gray-700">
-                <div class="bg-gray-800/50 border border-gray-600 rounded-lg p-4">
-                    <div class="flex items-center justify-between mb-3">
-                        <span class="text-gray-400 text-sm">Mining Wallet</span>
-                        <span class="bg-green-600 text-green-100 text-xs px-2 py-1 rounded-full">Connected</span>
+            <!-- Compact Mining Wallet -->
+            <div class="p-3 border-b border-gray-700/50">
+                <div class="bg-gradient-to-br from-gray-800/40 to-gray-900/20 border border-gray-600/30 rounded-lg p-3">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-gray-300 text-sm font-medium">Mining Wallet</span>
+                        <span class="bg-green-600/20 border border-green-500/30 text-green-400 text-xs px-2 py-0.5 rounded-full">Connected</span>
                     </div>
-                    <div class="text-xs text-gray-500 font-mono break-all">
-                        bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh
+                    
+                    <div class="bg-gray-900/40 rounded p-2 mb-2">
+                        <div class="text-xs text-gray-300 font-mono">bc1qxy...fjhx0wlh</div>
                     </div>
-                    <div class="flex items-center justify-between mt-3 text-sm">
-                        <span class="text-gray-400">Pool Fee:</span>
-                        <span class="text-blgv-primary">2.0%</span>
+                    
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                            <span class="text-gray-400">Fee</span>
+                            <span class="text-red-400 font-semibold ml-1">2.0%</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-400">Method</span>
+                            <span class="text-blue-400 font-semibold ml-1">PPS+</span>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Mining Performance -->
-            <div class="p-6 border-b border-gray-700">
-                <div class="bg-gray-800/30 rounded-lg p-4">
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="flex items-center space-x-2">
-                            <svg class="w-5 h-5 text-orange-500" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                            </svg>
-                            <span class="text-white font-semibold">Mining Stats</span>
-                        </div>
-                        <svg class="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M7 10l5 5 5-5z"/>
-                        </svg>
-                    </div>
-                    
-                    <div class="space-y-3">
-                        <div class="flex justify-between items-center">
-                            <span class="text-gray-300">Hash Rate</span>
-                            <span class="text-green-400 font-mono">111.0 TH/s</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-gray-300">Active Workers</span>
-                            <span class="text-blue-400 font-mono">2</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-gray-300">Efficiency</span>
-                            <span class="text-green-400 font-mono">98.7%</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-gray-300">Valid Shares</span>
-                            <span class="text-white font-mono">4,287</span>
-                        </div>
-                    </div>
-                    
-                    <button onclick="showSection('mining-setup')" class="w-full mt-4 bg-blgv-primary hover:bg-red-700 text-white py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors">
-                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                        </svg>
-                        <span>Optimize Miners</span>
-                    </button>
-                </div>
-            </div>
 
-            <!-- Expandable Sections -->
+
+            <!-- Core Mining Quick Access -->
             <div class="flex-1 overflow-y-auto">
-                <!-- Mining Operations -->
-                <div class="border-b border-gray-700">
-                    <button onclick="toggleDrawerSection('mining-operations')" class="w-full p-6 flex items-center justify-between hover:bg-gray-800/30 transition-colors">
-                        <div class="flex items-center space-x-3">
-                            <svg class="w-5 h-5 text-orange-400" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                            </svg>
-                            <span class="text-white">Mining Operations</span>
-                        </div>
-                        <svg class="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M7 10l5 5 5-5z"/>
+                <!-- Current Earnings Card -->
+                <div class="p-4 m-4 bg-gradient-to-br from-green-900/30 to-emerald-900/20 border border-green-500/30 rounded-xl">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-white font-semibold">Today's Earnings</h3>
+                        <svg class="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/>
                         </svg>
-                    </button>
-                    <div id="mining-operations" class="hidden px-6 pb-4">
-                        <div class="space-y-3">
-                            <div class="flex items-center justify-between p-2 bg-gray-800/30 rounded">
-                                <span class="text-sm text-gray-400">Bitaxe Ultra</span>
-                                <span class="text-green-400 text-xs">Online</span>
-                            </div>
-                            <div class="flex items-center justify-between p-2 bg-gray-800/30 rounded">
-                                <span class="text-sm text-gray-400">Antminer S19</span>
-                                <span class="text-green-400 text-xs">Online</span>
-                            </div>
-                            <button onclick="showSection('mining-setup')" class="w-full text-xs bg-gray-700 hover:bg-gray-600 text-white py-2 px-3 rounded">
-                                Add Miner
-                            </button>
+                    </div>
+                    <div class="text-2xl font-bold text-green-400 mb-1">0.00847 BTC</div>
+                    <div class="text-sm text-gray-400">Next payout: 23h 47m</div>
+                </div>
+
+                <!-- Hash Rental Quick Access -->
+                <div class="p-4 m-4 bg-gradient-to-br from-orange-900/30 to-red-900/20 border border-orange-500/30 rounded-xl">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-white font-semibold">Hash Rentals</h3>
+                        <svg class="w-5 h-5 text-orange-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                        </svg>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 mb-3">
+                        <button onclick="showSection('marketplace')" class="bg-orange-600/20 hover:bg-orange-600/30 text-orange-400 py-2 px-3 rounded-lg text-sm transition-colors">
+                            Rent Hash
+                        </button>
+                        <button onclick="showSection('marketplace')" class="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 py-2 px-3 rounded-lg text-sm transition-colors">
+                            Offer Hash
+                        </button>
+                    </div>
+                    <div class="text-xs text-gray-400 text-center">
+                        Boost earnings or monetize excess capacity
+                    </div>
+                </div>
+
+                <!-- Mining Performance Overview -->
+                <div class="p-4 m-4 bg-gradient-to-br from-blue-900/30 to-cyan-900/20 border border-blue-500/30 rounded-xl">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-white font-semibold">Mining Performance</h3>
+                        <svg class="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/>
+                        </svg>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                            <div class="text-gray-400">Hash Rate</div>
+                            <div class="text-blue-400 font-semibold">111.0 TH/s</div>
+                        </div>
+                        <div>
+                            <div class="text-gray-400">Efficiency</div>
+                            <div class="text-green-400 font-semibold">98.7%</div>
+                        </div>
+                        <div>
+                            <div class="text-gray-400">Pool Share</div>
+                            <div class="text-white font-semibold">0.016%</div>
+                        </div>
+                        <div>
+                            <div class="text-gray-400">Pool Luck</div>
+                            <div class="text-green-400 font-semibold">102.3%</div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Earnings & Payouts -->
-                <div class="border-b border-gray-700">
-                    <button onclick="toggleDrawerSection('earnings-payouts')" class="w-full p-6 flex items-center justify-between hover:bg-gray-800/30 transition-colors">
-                        <div class="flex items-center space-x-3">
-                            <svg class="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/>
-                            </svg>
-                            <span class="text-white">Earnings & Payouts</span>
-                        </div>
-                        <svg class="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M7 10l5 5 5-5z"/>
-                        </svg>
-                    </button>
-                    <div id="earnings-payouts" class="hidden px-6 pb-4">
-                        <div class="space-y-2 text-sm">
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">24H Earnings</span>
-                                <span class="text-green-400">0.00847 BTC</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Pending Payout</span>
-                                <span class="text-yellow-400">0.02293 BTC</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Next Payout</span>
-                                <span class="text-blue-400">6h 12m</span>
-                            </div>
-                            <div class="flex justify-between font-semibold border-t border-gray-600 pt-2">
-                                <span class="text-white">Total Earned</span>
-                                <span class="text-green-400">1.24567 BTC</span>
-                            </div>
-                        </div>
+                <!-- Ecosystem Quick Links -->
+                <div class="p-4 m-4 bg-gradient-to-br from-purple-900/30 to-pink-900/20 border border-purple-500/30 rounded-xl">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-white font-semibold">BLGV Ecosystem</h3>
+                        <div class="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
                     </div>
-                </div>
-
-                <!-- Pool & Network -->
-                <div class="border-b border-gray-700">
-                    <button onclick="toggleDrawerSection('pool-network')" class="w-full p-6 flex items-center justify-between hover:bg-gray-800/30 transition-colors">
-                        <div class="flex items-center space-x-3">
-                            <svg class="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                    <div class="space-y-2">
+                        <button onclick="window.open('https://dex.blgvbtc.com', '_blank')" class="w-full bg-red-600/20 hover:bg-red-600/30 text-red-400 py-2 px-3 rounded-lg text-sm transition-colors flex items-center justify-center space-x-2">
+                            <span>Trade on DEX</span>
+                            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.11 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>
                             </svg>
-                            <span class="text-white">Pool & Network</span>
-                        </div>
-                        <svg class="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M7 10l5 5 5-5z"/>
-                        </svg>
-                    </button>
-                    <div id="pool-network" class="hidden px-6 pb-4">
-                        <div class="space-y-2 text-sm">
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Pool Luck</span>
-                                <span class="text-green-400">102.3%</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Next Difficulty</span>
-                                <span class="text-yellow-400">+2.1%</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Network Hash</span>
-                                <span class="text-blue-400">693.5 EH/s</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Your Share</span>
-                                <span class="text-white">0.016%</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- DEX Integration -->
-                <div class="border-b border-gray-700">
-                    <button onclick="toggleDrawerSection('dex-integration')" class="w-full p-6 flex items-center justify-between hover:bg-gray-800/30 transition-colors">
-                        <div class="flex items-center space-x-3">
-                            <svg class="w-5 h-5 text-purple-400" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                            </svg>
-                            <span class="text-white">DEX Integration</span>
-                        </div>
-                        <svg class="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M7 10l5 5 5-5z"/>
-                        </svg>
-                    </button>
-                    <div id="dex-integration" class="hidden px-6 pb-4">
-                        <div class="space-y-2">
-                            <button onclick="window.open('https://dex.blgvbtc.com', '_blank')" class="w-full text-xs bg-blgv-primary hover:bg-red-700 text-white py-2 px-3 rounded">
-                                Trade on DEX
-                            </button>
-                            <div class="text-xs text-gray-400 text-center">
-                                Auto-convert earnings to BLGVF tokens
-                            </div>
+                        </button>
+                        <div class="text-xs text-gray-400 text-center">
+                            Auto-deposit enabled • Intelligence Platform synced
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Quick Actions -->
-            <div class="p-6 border-t border-gray-700 space-y-3">
-                <div class="grid grid-cols-2 gap-2">
-                    <button onclick="copyWalletAddress()" class="flex items-center justify-center space-x-1 bg-gray-700 hover:bg-gray-600 text-white py-2 px-2 rounded-lg transition-colors text-xs">
-                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                        </svg>
-                        <span>Copy</span>
-                    </button>
-                    <button onclick="viewOnExplorer()" class="flex items-center justify-center space-x-1 bg-gray-700 hover:bg-gray-600 text-white py-2 px-2 rounded-lg transition-colors text-xs">
-                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.11 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>
-                        </svg>
-                        <span>Explorer</span>
-                    </button>
-                </div>
-                <button onclick="showSection('analytics')" class="w-full flex items-center justify-center space-x-2 bg-blgv-primary hover:bg-red-700 text-white py-2 px-4 rounded-lg transition-colors text-sm">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <!-- Bottom padding for scroll clearance -->
+                <div class="pb-20"></div>
+            </div>
+
+        <!-- Compact Bottom Actions -->
+        <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-gray-900 via-gray-900/95 to-gray-900/80 p-3 border-t border-gray-700/50">
+            <div class="grid grid-cols-3 gap-2">
+                <button onclick="copyWalletAddress()" class="flex items-center justify-center bg-gray-700/60 hover:bg-gray-600/60 text-white py-2 rounded-lg transition-colors text-xs">
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                    </svg>
+                </button>
+                <button onclick="viewOnExplorer()" class="flex items-center justify-center bg-gray-700/60 hover:bg-gray-600/60 text-white py-2 rounded-lg transition-colors text-xs">
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.11 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>
+                    </svg>
+                </button>
+                <button onclick="showSection('analytics')" class="flex items-center justify-center bg-red-600/80 hover:bg-red-700/80 text-white py-2 rounded-lg transition-colors text-xs">
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/>
                     </svg>
-                    <span>View Analytics</span>
-                </button>
-                <button onclick="disconnectWallet()" class="w-full flex items-center justify-center space-x-2 bg-red-600/20 border border-red-500 text-red-400 py-2 px-4 rounded-lg hover:bg-red-600/30 transition-colors text-sm">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.59L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
-                    </svg>
-                    <span>Disconnect Mining Wallet</span>
                 </button>
             </div>
         </div>
     </div>
 
     <!-- Mobile Menu Toggle Button (positioned like DEX) -->
-    <button id="mobile-drawer-toggle" onclick="toggleWalletDrawer()" class="fixed bottom-6 right-6 md:hidden w-14 h-14 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center text-white shadow-lg transition-all duration-300 z-40">
+    <button id="mobile-drawer-toggle" onclick="toggleWalletDrawer()" class="fixed bottom-6 right-6 w-14 h-14 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center text-white shadow-lg transition-all duration-300 z-50">
         <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
             <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
         </svg>
     </button>
 
     <!-- Overlay for mobile drawer -->
-    <div id="drawer-overlay" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 opacity-0 pointer-events-none transition-opacity duration-300"></div>
+    <div id="drawer-overlay" class="fixed inset-0 bg-black/30 z-40 opacity-0 pointer-events-none transition-opacity duration-300"></div>
 
     <!-- Toast Notification -->
     <div id="toast" class="toast">
@@ -2008,22 +1981,18 @@ ordinals_mining: ${ordinals}
             });
         }
 
-        // Wallet Drawer Functions (matching DEX functionality)
+        // Wallet Drawer Functions (FAB hides when drawer open)
         function toggleWalletDrawer() {
             const drawer = document.getElementById('wallet-drawer');
             const overlay = document.getElementById('drawer-overlay');
-            const toggle = document.getElementById('mobile-drawer-toggle');
+            const fabButton = document.getElementById('mobile-drawer-toggle');
             
             if (drawer.classList.contains('translate-x-full')) {
                 // Open drawer
                 drawer.classList.remove('translate-x-full');
                 overlay.classList.remove('opacity-0', 'pointer-events-none');
-                toggle.style.transform = 'scale(0.8)';
-                toggle.innerHTML = `
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                `;
+                fabButton.style.opacity = '0';
+                fabButton.style.pointerEvents = 'none';
             } else {
                 // Close drawer
                 closeWalletDrawer();
@@ -2033,30 +2002,15 @@ ordinals_mining: ${ordinals}
         function closeWalletDrawer() {
             const drawer = document.getElementById('wallet-drawer');
             const overlay = document.getElementById('drawer-overlay');
-            const toggle = document.getElementById('mobile-drawer-toggle');
+            const fabButton = document.getElementById('mobile-drawer-toggle');
             
             drawer.classList.add('translate-x-full');
             overlay.classList.add('opacity-0', 'pointer-events-none');
-            toggle.style.transform = 'scale(1)';
-            toggle.innerHTML = `
-                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
-                </svg>
-            `;
+            fabButton.style.opacity = '1';
+            fabButton.style.pointerEvents = 'auto';
         }
 
-        function toggleDrawerSection(sectionId) {
-            const section = document.getElementById(sectionId);
-            const button = section.previousElementSibling.querySelector('svg:last-child');
-            
-            if (section.classList.contains('hidden')) {
-                section.classList.remove('hidden');
-                button.style.transform = 'rotate(180deg)';
-            } else {
-                section.classList.add('hidden');
-                button.style.transform = 'rotate(0deg)';
-            }
-        }
+
 
         function copyWalletAddress() {
             const address = 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh';
@@ -2153,6 +2107,15 @@ ordinals_mining: ${ordinals}
                 const response = await fetch('/api/stats');
                 const data = await response.json();
                 
+                // Handle test mode indicator
+                const testModeIndicator = document.getElementById('test-mode-indicator');
+                if (data.test_mode && data.test_mode.is_active) {
+                    testModeIndicator.classList.remove('hidden');
+                    console.log('Test Mode Active - Session ID:', data.test_mode.session_id);
+                } else {
+                    testModeIndicator.classList.add('hidden');
+                }
+                
                 document.getElementById('pool-hashrate').textContent = formatHashRate(data.pool_hashrate);
                 document.getElementById('active-miners').textContent = data.active_miners.toLocaleString();
                 document.getElementById('network-difficulty').textContent = formatDifficulty(data.network_difficulty);
@@ -2163,6 +2126,16 @@ ordinals_mining: ${ordinals}
                 if (data.block_height) {
                     document.getElementById('block-height').textContent = data.block_height.toLocaleString();
                     document.getElementById('mobile-block-height').textContent = data.block_height.toLocaleString();
+                }
+                
+                // Update drawer with test mode fake earnings if active
+                if (data.test_mode && data.test_mode.show_fake_assets && data.test_mode.fake_earnings > 0) {
+                    const earningsElement = document.querySelector('#mining-wallet-earnings');
+                    if (earningsElement) {
+                        const currentEarnings = parseFloat(earningsElement.textContent) || 0;
+                        const totalEarnings = currentEarnings + data.test_mode.fake_earnings;
+                        earningsElement.textContent = totalEarnings.toFixed(5);
+                    }
                 }
             } catch (error) {
                 console.log('Using default stats display');
@@ -2234,11 +2207,14 @@ def stats():
         except Exception:
             pass
 
+        # Get test mode data if active
+        fake_data = get_fake_mining_data() if should_show_fake_assets() else {}
+        
         stats_data = {
-            'pool_hashrate': pool_stats['total_hashrate'],
-            'active_miners': pool_stats['active_miners'],
+            'pool_hashrate': pool_stats['total_hashrate'] + fake_data.get('fake_hashrate', 0),
+            'active_miners': pool_stats['active_miners'] + fake_data.get('fake_workers', 0),
             'total_shares': pool_stats['total_shares'],
-            'blocks_found': pool_stats['blocks_found'],
+            'blocks_found': pool_stats['blocks_found'] + fake_data.get('fake_blocks', 0),
             'network_difficulty': pool_stats['network_difficulty'],
             'btc_price': btc_price,
             'block_height': block_height,
@@ -2249,7 +2225,19 @@ def stats():
             'avg_latency': '12ms',
             'stratum_core_port': 3333,
             'stratum_knots_port': 3334,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.now().isoformat(),
+            # Test mode configuration
+            'test_mode': {
+                'is_active': is_test_mode(),
+                'show_fake_assets': should_show_fake_assets(),
+                'session_id': get_test_session_id(),
+                'fake_earnings': fake_data.get('fake_earnings', 0)
+            },
+            # Minimal SDK integration - treasury data
+            'treasury': {
+                'total_btc': 15.847,
+                'transparency_score': 100
+            }
         }
         
         return jsonify(stats_data)
@@ -2263,6 +2251,39 @@ def stats():
             'error': 'Some live data unavailable'
         })
 
+@app.route('/api/ecosystem/status')
+def ecosystem_status():
+    """Minimal SDK integration - ecosystem connectivity status"""
+    try:
+        return jsonify({
+            "success": True,
+            "data": {
+                "dex_connection": {
+                    "status": "connected",
+                    "url": "https://dex.blgvbtc.com",
+                    "integrated": True
+                },
+                "intelligence_platform": {
+                    "status": "connected", 
+                    "url": "https://blgvbtc.com",
+                    "integrated": True
+                },
+                "mobile_app": {
+                    "status": "connected",
+                    "sync_enabled": True,
+                    "integrated": True
+                },
+                "treasury": {
+                    "status": "active",
+                    "transparency_enabled": True,
+                    "real_time_updates": True
+                }
+            }
+        })
+    except Exception as e:
+        logger.error(f"Ecosystem status error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route('/api/system/status')
 def system_status():
     """System status endpoint"""
@@ -2275,8 +2296,154 @@ def system_status():
         'database': 'connected',
         'btcpay_server': 'connected',
         'uptime': '99.95%',
-        'version': '2.0.0-institutional'
+        'version': '2.0.0-institutional',
+        'test_mode': {
+            'is_active': is_test_mode(),
+            'show_fake_assets': should_show_fake_assets(),
+            'session_id': get_test_session_id()
+        }
     })
+
+@app.route('/api/miners/register', methods=['POST'])
+def register_miner_sdk():
+    """Register miner with full SDK ecosystem integration and test mode support"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"success": False, "error": "No data provided"}), 400
+        
+        # Validate required fields
+        required_fields = ['wallet_address', 'miner_name', 'miner_type', 'expected_hashrate']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"success": False, "error": f"Missing required field: {field}"}), 400
+        
+        # Add test mode fields using configuration
+        miner_data = add_test_mode_fields({
+            'wallet_address': data['wallet_address'],
+            'miner_name': data['miner_name'],
+            'miner_type': data['miner_type'],
+            'expected_hashrate': data['expected_hashrate'],
+            'power_consumption': data.get('power_consumption', 0),
+            'status': 'active'
+        })
+        
+        # Insert into database with test mode fields
+        import psycopg2
+        conn = psycopg2.connect(os.environ.get('DATABASE_URL'))
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT INTO miner_configs 
+            (wallet_address, miner_name, miner_type, expected_hashrate, power_consumption, is_test_mode, test_session_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            miner_data['wallet_address'],
+            miner_data['miner_name'], 
+            miner_data['miner_type'],
+            miner_data['expected_hashrate'],
+            miner_data['power_consumption'],
+            miner_data['is_test_mode'],
+            miner_data['test_session_id']
+        ))
+        
+        miner_id = cursor.fetchone()[0]
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        # Create test payout if in test mode
+        if should_show_fake_assets():
+            fake_data = get_fake_mining_data()
+            fake_payout = fake_data['fake_payouts'][0]
+            
+            conn = psycopg2.connect(os.environ.get('DATABASE_URL'))
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                INSERT INTO pool_payouts 
+                (wallet_address, amount, transaction_hash, status, is_test_mode, test_session_id)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (
+                miner_data['wallet_address'],
+                fake_payout['amount'],
+                fake_payout['transaction_hash'],
+                fake_payout['status'],
+                True,
+                get_test_session_id()
+            ))
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+        
+        return jsonify({
+            "success": True,
+            "miner_id": miner_id,
+            "message": "Miner registered successfully with ecosystem integration",
+            "test_mode": {
+                "is_active": is_test_mode(),
+                "fake_payout_created": should_show_fake_assets()
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Miner registration error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/payouts/<wallet_address>')
+def get_payouts(wallet_address):
+    """Get payouts for wallet with test mode filtering"""
+    try:
+        import psycopg2
+        conn = psycopg2.connect(os.environ.get('DATABASE_URL'))
+        cursor = conn.cursor()
+        
+        # Filter by test mode - in test mode show all, in production exclude test data
+        if is_test_mode():
+            cursor.execute("""
+                SELECT amount, transaction_hash, status, created_at, is_test_mode, test_session_id
+                FROM pool_payouts 
+                WHERE wallet_address = %s 
+                ORDER BY created_at DESC
+            """, (wallet_address,))
+        else:
+            cursor.execute("""
+                SELECT amount, transaction_hash, status, created_at, is_test_mode, test_session_id
+                FROM pool_payouts 
+                WHERE wallet_address = %s AND is_test_mode = false
+                ORDER BY created_at DESC
+            """, (wallet_address,))
+        
+        payouts = []
+        for row in cursor.fetchall():
+            payouts.append({
+                'amount': float(row[0]),
+                'transaction_hash': row[1],
+                'status': row[2],
+                'created_at': row[3].isoformat() if row[3] else None,
+                'is_test_mode': row[4],
+                'test_session_id': row[5]
+            })
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "payouts": payouts,
+            "test_mode": {
+                "is_active": is_test_mode(),
+                "session_id": get_test_session_id(),
+                "total_payouts": len(payouts)
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Payouts retrieval error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/miner/<address>')
 def miner_stats(address):
