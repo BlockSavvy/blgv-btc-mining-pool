@@ -458,7 +458,7 @@ MINING_POOL_HTML = '''<!DOCTYPE html>
         <span class="mr-2">⚠️</span>
         <div>
             <strong>Test Mode Active</strong>
-            <span class="ml-2">Displaying fake mining payouts and assets for testing</span>
+            <span class="ml-2">Displaying real test mining data from database</span>
         </div>
     </div>
 
@@ -2207,14 +2207,12 @@ def stats():
         except Exception:
             pass
 
-        # Get test mode data if active
-        fake_data = get_fake_mining_data() if should_show_fake_assets() else {}
-        
+        # Test mode shows real test data, not fake additions
         stats_data = {
-            'pool_hashrate': pool_stats['total_hashrate'] + fake_data.get('fake_hashrate', 0),
-            'active_miners': pool_stats['active_miners'] + fake_data.get('fake_workers', 0),
+            'pool_hashrate': pool_stats['total_hashrate'],
+            'active_miners': pool_stats['active_miners'],
             'total_shares': pool_stats['total_shares'],
-            'blocks_found': pool_stats['blocks_found'] + fake_data.get('fake_blocks', 0),
+            'blocks_found': pool_stats['blocks_found'],
             'network_difficulty': pool_stats['network_difficulty'],
             'btc_price': btc_price,
             'block_height': block_height,
@@ -2226,12 +2224,11 @@ def stats():
             'stratum_core_port': 3333,
             'stratum_knots_port': 3334,
             'timestamp': datetime.now().isoformat(),
-            # Test mode configuration
+            # Test mode configuration - shows real test database records
             'test_mode': {
                 'is_active': is_test_mode(),
                 'show_fake_assets': should_show_fake_assets(),
-                'session_id': get_test_session_id(),
-                'fake_earnings': fake_data.get('fake_earnings', 0)
+                'session_id': get_test_session_id()
             },
             # Minimal SDK integration - treasury data
             'treasury': {
