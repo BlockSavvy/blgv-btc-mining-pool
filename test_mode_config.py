@@ -30,31 +30,18 @@ class TestModeConfig:
         return self.is_test_mode
     
     def should_show_fake_assets(self) -> bool:
-        """Check if fake assets should be displayed"""
-        return self.show_fake_assets
+        """Check if fake assets should be displayed - always False for real test data"""
+        return False  # No fake assets, only real test data from database
     
     def get_test_session_id(self) -> Optional[str]:
         """Get current test session ID"""
         return self.test_session_id
     
     def get_fake_mining_data(self) -> Dict[str, Any]:
-        """Get fake mining data matching mobile app values"""
-        return {
-            'fake_earnings': 0.001,  # 0.001 BTC fake earnings (matches mobile 0.01 BTC scaled)
-            'fake_hashrate': 1000000000000,  # Add 1 TH/s fake hashrate
-            'fake_workers': 5,  # Add 5 fake workers
-            'fake_blocks': 1,  # Add 1 fake block
-            'fake_payouts': [
-                {
-                    'amount': 0.0005,
-                    'transaction_hash': 'test_' + str(uuid.uuid4())[:16],
-                    'status': 'completed',
-                    'created_at': datetime.now().isoformat(),
-                    'is_test_mode': True,
-                    'test_session_id': self.test_session_id
-                }
-            ]
-        }
+        """Get real test mining data from database (no fake inflation)"""
+        # Return empty dict - no fake data should be added to real stats
+        # Test mode should show actual test database records, not artificial inflation
+        return {}
     
     def get_config_dict(self) -> Dict[str, Any]:
         """Get complete configuration dictionary"""
@@ -78,7 +65,7 @@ def is_test_mode() -> bool:
     return test_mode_config.is_test_mode_active()
 
 def should_show_fake_assets() -> bool:
-    """Check if fake assets should be displayed"""
+    """Check if fake assets should be displayed - always False for real test data"""
     return test_mode_config.should_show_fake_assets()
 
 def get_test_session_id() -> Optional[str]:
