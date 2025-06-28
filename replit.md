@@ -339,6 +339,13 @@ The BLGV BTC Mining Pool is an institutional-grade Bitcoin-only mining pool buil
 - June 27, 2025: **WALLET AUTHENTICATION ENDPOINT**: POST /api/auth/wallet - Wallet-based authentication for mobile users
 - June 27, 2025: **ALL ENDPOINTS TESTED**: All mobile API endpoints returning 200 status codes with authentic data
 - June 27, 2025: **DEPLOYMENT READY**: Mobile app integration complete, ready for pool.blgvbtc.com deployment
+- June 28, 2025: **BITCOIN WALLET AUTHENTICATION IMPLEMENTED**: Added comprehensive Bitcoin message signing authentication
+- June 28, 2025: **NEW API ENDPOINT**: POST /api/auth/bitcoin-wallet - Full Bitcoin wallet authentication with JWT tokens
+- June 28, 2025: **QR CODE AUTHENTICATION PAGE**: Added /auth route with mobile-friendly QR code interface
+- June 28, 2025: **ENHANCED WALLET DRAWER**: Updated wallet drawer with mobile authentication section and status indicators
+- June 28, 2025: **JAVASCRIPT FUNCTIONS ADDED**: copyMinerAddress, viewOnExplorer, updateAuthStatus for mobile integration
+- June 28, 2025: **AUTHENTICATION TESTED**: Bitcoin wallet auth returning JWT tokens and pool stats successfully
+- June 28, 2025: **MOBILE APP READY**: Complete Bitcoin wallet authentication integration matching DEX implementation
 
 ## User Preferences
 
