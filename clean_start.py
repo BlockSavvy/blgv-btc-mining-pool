@@ -5013,12 +5013,23 @@ def internal_error(error):
 
 if __name__ == '__main__':
     try:
+        # GCE deployment configuration
+        port = int(os.environ.get('PORT', os.environ.get('REPLIT_PORT', 5000)))
+        host = '0.0.0.0'  # Required for GCE deployment
+        
         logger.info("Starting BLGV BTC Mining Pool - Clean Version")
-        logger.info("Web interface starting on port 5000")
+        logger.info(f"Web interface starting on {host}:{port}")
+        logger.info("GCE deployment configuration active")
         logger.info("Ready for institutional mining operations")
         
-        # Run clean Flask app
-        app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+        # Configure for production deployment
+        app.config['SERVER_NAME'] = None  # Allow any host for GCE
+        app.config['APPLICATION_ROOT'] = '/'
+        
+        # Run clean Flask app with GCE-compatible settings
+        app.run(host=host, port=port, debug=False, threaded=True, use_reloader=False)
         
     except Exception as e:
         logger.error(f"Failed to start application: {e}")
+        import traceback
+        traceback.print_exc()
