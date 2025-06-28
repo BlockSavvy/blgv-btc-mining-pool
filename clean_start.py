@@ -2906,6 +2906,16 @@ ordinals_mining: ${ordinals}
             return 'pool_' + Math.random().toString(36).substring(2) + '_' + Date.now();
         }
         
+        // Fix for JavaScript DOM error "Cannot set properties of null"
+        function updateAuthStatus(message) {
+            const statusElement = document.getElementById('auth-status');
+            if (statusElement) {
+                statusElement.textContent = message;
+            } else {
+                console.warn('Auth status element not found');
+            }
+        }
+        
         function regenerateQR() {
             showToast('Generating new QR code...', 'info');
             generateQRCode();
@@ -3749,6 +3759,11 @@ def check_auth_status():
 @app.route('/api/auth/bitcoin-wallet', methods=['POST'])
 def auth_bitcoin_wallet():
     """Bitcoin wallet authentication for mobile app - matches DEX endpoint"""
+    import time
+    import datetime
+    import jwt
+    import psycopg2
+    
     try:
         data = request.get_json()
         print(f"🔐 Pool Bitcoin Wallet Authentication Request - Raw data: {data}")
@@ -3841,15 +3856,13 @@ def auth_bitcoin_wallet():
             miner_id = existing_miner[0]
             print(f"✅ Found existing miner: {miner_id}")
         else:
-            # Register new miner
-            # Generate unique username with timestamp
-            import time
+            # Register new miner with unique identifier
             unique_suffix = f"{wallet_address[-8:]}_{int(time.time() * 1000) % 1000000}"
             cursor.execute("""
                 INSERT INTO miners (wallet_address, username, status, hash_rate, is_test_mode, test_session_id)
                 VALUES (%s, %s, %s, %s, %s, %s)
                 RETURNING id
-            """, (wallet_address, f"miner_{unique_suffix}", 'active', 0, True, 'test_session_pool'))
+            """, (wallet_address, f"mobile_miner_{unique_suffix}", 'active', 0.0, True, 'test_session_pool'))
             
             miner_id = cursor.fetchone()[0]
             print(f"✅ Created new miner: {miner_id}")
