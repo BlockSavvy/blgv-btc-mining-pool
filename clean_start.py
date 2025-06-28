@@ -3320,41 +3320,224 @@ ordinals_mining: ${ordinals}
             }
         }
 
-        // Update auth status when mobile app connects
+        // Update auth status when mobile app connects - WITH NULL CHECKS
         function updateAuthStatus(status, walletAddress) {
-            const statusElement = document.getElementById('auth-status');
-            const walletElement = document.getElementById('connected-wallet');
+            console.log('🔄 Updating auth status:', status, walletAddress);
+            
+            // Find elements safely with multiple fallbacks
+            const statusElement = document.getElementById('auth-status') || 
+                                 document.querySelector('[data-auth-status]') ||
+                                 document.querySelector('.auth-status');
+                                 
+            const walletElement = document.getElementById('connected-wallet') || 
+                                 document.querySelector('[data-connected-wallet]') ||
+                                 document.querySelector('.connected-wallet');
+            
+            // Create elements if they don't exist
+            if (!statusElement || !walletElement) {
+                console.warn('⚠️ Auth status elements not found, creating them...');
+                createAuthStatusElements();
+            }
             
             if (status === 'connected' && walletAddress) {
                 isAuthenticated = true;
                 currentWalletAddress = walletAddress;
                 
-                statusElement.textContent = 'Connected';
-                statusElement.className = 'bg-green-600/20 border border-green-500/30 text-green-400 text-xs px-2 py-1 rounded-full';
+                // Safe update with null checks
+                if (statusElement) {
+                    statusElement.textContent = 'Connected';
+                    statusElement.className = 'bg-green-600/20 border border-green-500/30 text-green-400 text-xs px-2 py-1 rounded-full';
+                }
                 
-                const shortAddress = walletAddress.slice(0, 6) + '...' + walletAddress.slice(-6);
-                walletElement.textContent = shortAddress;
+                if (walletElement) {
+                    const shortAddress = walletAddress.slice(0, 6) + '...' + walletAddress.slice(-6);
+                    walletElement.textContent = shortAddress;
+                }
                 
                 // Show authenticated content in drawer
-                showAuthenticatedContent();
+                try {
+                    showAuthenticatedContent();
+                } catch (error) {
+                    console.warn('Failed to show authenticated content:', error);
+                }
                 
                 // Load user-specific mining data
-                loadUserMiningData(walletAddress);
+                try {
+                    loadUserMiningData(walletAddress);
+                } catch (error) {
+                    console.warn('Failed to load user mining data:', error);
+                }
                 
-                showToast('Mobile wallet connected successfully!', 'success');
+                showToast('🔐 Mobile wallet connected successfully!', 'success');
+                
             } else {
                 isAuthenticated = false;
                 currentWalletAddress = null;
                 
-                statusElement.textContent = 'Disconnected';
-                statusElement.className = 'bg-gray-600/20 border border-gray-500/30 text-gray-400 text-xs px-2 py-1 rounded-full';
-                walletElement.textContent = 'bc1q...loading';
+                // Safe update with null checks
+                if (statusElement) {
+                    statusElement.textContent = 'Disconnected';
+                    statusElement.className = 'bg-gray-600/20 border border-gray-500/30 text-gray-400 text-xs px-2 py-1 rounded-full';
+                }
+                
+                if (walletElement) {
+                    walletElement.textContent = 'bc1q...loading';
+                }
                 
                 // Hide authenticated content in drawer
-                hideAuthenticatedContent();
+                try {
+                    hideAuthenticatedContent();
+                } catch (error) {
+                    console.warn('Failed to hide authenticated content:', error);
+                }
                 
                 showToast('Mobile wallet disconnected', 'info');
             }
+        }
+
+        // Create authentication status elements if they don't exist
+        function createAuthStatusElements() {
+            console.log('🔧 Creating missing authentication status elements...');
+            
+            // Find wallet section in header or create placeholder
+            let targetContainer = document.querySelector('.wallet-section') ||
+                                 document.querySelector('[data-wallet-section]') ||
+                                 document.querySelector('.header-right') ||
+                                 document.createElement('div');
+            
+            // Create auth status element if missing
+            if (!document.getElementById('auth-status')) {
+                const statusElement = document.createElement('div');
+                statusElement.id = 'auth-status';
+                statusElement.className = 'bg-gray-600/20 border border-gray-500/30 text-gray-400 text-xs px-2 py-1 rounded-full';
+                statusElement.textContent = 'Disconnected';
+                statusElement.setAttribute('data-auth-status', 'true');
+                
+                targetContainer.appendChild(statusElement);
+                console.log('✅ Created auth-status element');
+            }
+            
+            // Create connected wallet element if missing
+            if (!document.getElementById('connected-wallet')) {
+                const walletElement = document.createElement('div');
+                walletElement.id = 'connected-wallet';
+                walletElement.className = 'text-gray-400 text-sm';
+                walletElement.textContent = 'bc1q...loading';
+                walletElement.setAttribute('data-connected-wallet', 'true');
+                
+                targetContainer.appendChild(walletElement);
+                console.log('✅ Created connected-wallet element');
+            }
+        }
+
+        // Initialize authentication monitoring with WebSocket fallback to polling
+        function initAuthenticationMonitoring(challenge) {
+            console.log('👂 Starting authentication listener for challenge:', challenge);
+            
+            let pollInterval = null;
+            let isMonitoring = true;
+            
+            // Try WebSocket first (for real-time updates)
+            function tryWebSocket() {
+                try {
+                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const wsUrl = `${protocol}//${window.location.host}/ws/auth`;
+                    const ws = new WebSocket(wsUrl);
+                    
+                    ws.onopen = () => {
+                        console.log('✅ WebSocket connection established');
+                        ws.send(JSON.stringify({ type: 'monitor_auth', challenge: challenge }));
+                    };
+                    
+                    ws.onmessage = (event) => {
+                        if (!isMonitoring) return;
+                        
+                        try {
+                            const data = JSON.parse(event.data);
+                            console.log('📨 WebSocket auth update:', data);
+                            
+                            if (data.type === 'auth_success' && data.challenge === challenge) {
+                                isMonitoring = false;
+                                updateAuthStatus('connected', data.walletAddress);
+                                ws.close();
+                            } else if (data.type === 'auth_failed') {
+                                updateAuthStatus('error', data.message || 'Authentication failed');
+                            }
+                        } catch (error) {
+                            console.warn('WebSocket message parse error:', error);
+                        }
+                    };
+                    
+                    ws.onerror = () => {
+                        console.log('WebSocket failed, falling back to polling');
+                        startPollingAuth();
+                    };
+                    
+                    ws.onclose = () => {
+                        if (isMonitoring) {
+                            console.log('WebSocket closed, falling back to polling');
+                            startPollingAuth();
+                        }
+                    };
+                    
+                    // Timeout WebSocket after 3 seconds if no connection
+                    setTimeout(() => {
+                        if (ws.readyState === WebSocket.CONNECTING) {
+                            ws.close();
+                            startPollingAuth();
+                        }
+                    }, 3000);
+                    
+                } catch (error) {
+                    console.log('WebSocket not available, using polling');
+                    startPollingAuth();
+                }
+            }
+            
+            // Fallback polling method
+            function startPollingAuth() {
+                if (!isMonitoring || pollInterval) return;
+                
+                console.log('🔄 Starting authentication polling...');
+                
+                pollInterval = setInterval(async () => {
+                    if (!isMonitoring) {
+                        clearInterval(pollInterval);
+                        return;
+                    }
+                    
+                    try {
+                        const response = await fetch(`/api/auth/check-status?challenge=${encodeURIComponent(challenge)}`);
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            console.log('📊 Polling auth status:', data);
+                            
+                            if (data.authenticated) {
+                                isMonitoring = false;
+                                clearInterval(pollInterval);
+                                updateAuthStatus('connected', data.walletAddress);
+                            }
+                        } else {
+                            console.warn('Auth status check failed:', response.status);
+                        }
+                    } catch (error) {
+                        console.warn('Auth polling error:', error);
+                    }
+                }, 2000); // Poll every 2 seconds
+                
+                // Stop polling after 5 minutes (QR code expires)
+                setTimeout(() => {
+                    if (pollInterval) {
+                        clearInterval(pollInterval);
+                        isMonitoring = false;
+                        updateAuthStatus('expired', 'QR code expired. Please try again.');
+                    }
+                }, 300000);
+            }
+            
+            // Start with WebSocket attempt
+            tryWebSocket();
         }
 
         function disconnectWallet() {
