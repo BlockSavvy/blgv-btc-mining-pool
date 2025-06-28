@@ -243,6 +243,63 @@ MINING_POOL_HTML = '''<!DOCTYPE html>
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 20px;
         }
+        
+        /* Authentication Status Styles */
+        .auth-status-container {
+            margin-top: 1rem;
+            text-align: center;
+        }
+        
+        .auth-status {
+            font-weight: bold;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 0.5rem;
+            border: 1px solid;
+            transition: all 0.3s ease;
+        }
+        
+        .auth-status.pending {
+            background: rgba(59, 130, 246, 0.1);
+            color: #3b82f6;
+            border-color: rgba(59, 130, 246, 0.3);
+        }
+        
+        .auth-status.processing {
+            background: rgba(234, 179, 8, 0.1);
+            color: #eab308;
+            border-color: rgba(234, 179, 8, 0.3);
+            animation: pulse 2s infinite;
+        }
+        
+        .auth-status.connected {
+            background: rgba(34, 197, 94, 0.1);
+            color: #22c55e;
+            border-color: rgba(34, 197, 94, 0.3);
+        }
+        
+        .auth-status.failed {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+        
+        .auth-status.expired {
+            background: rgba(156, 163, 175, 0.1);
+            color: #9ca3af;
+            border-color: rgba(156, 163, 175, 0.3);
+        }
+        
+        .auth-message {
+            color: #6b7280;
+            font-size: 0.875rem;
+            line-height: 1.25rem;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
         .mobile-nav-link {
             padding: 12px 0;
             font-weight: 500;
@@ -2585,8 +2642,10 @@ ordinals_mining: ${ordinals}
                         qrImage.onload = () => {
                             console.log('✅ QR Code generated successfully via API');
                             qrContainer.appendChild(qrImage);
-                            updateAuthStatus('waiting', 'Waiting for mobile app authentication...');
-                            startAuthenticationPolling(challenge);
+                            updateAuthStatus('pending', 'Scan QR code with BLGV mobile app');
+                            
+                            // Initialize authentication monitoring
+                            initAuthenticationMonitoring(challenge);
                         };
                         
                         qrImage.onerror = () => {
@@ -2610,8 +2669,8 @@ ordinals_mining: ${ordinals}
                             </div>
                         </div>
                     `;
-                    updateAuthStatus('waiting', 'Waiting for mobile app authentication...');
-                    startAuthenticationPolling(challenge);
+                    updateAuthStatus('pending', 'Scan QR code with BLGV mobile app');
+                    initAuthenticationMonitoring(challenge);
                 };
                 
                 // Start the QRCode loading check
@@ -2907,13 +2966,164 @@ ordinals_mining: ${ordinals}
         }
         
         // Fix for JavaScript DOM error "Cannot set properties of null"
-        function updateAuthStatus(message) {
-            const statusElement = document.getElementById('auth-status');
+        function updateAuthStatus(status, message) {
+            console.log('🔄 Updating auth status:', { status, message });
+            
+            // Find or create status elements
+            const statusElement = document.getElementById('auth-status') || createAuthStatusElements();
+            const messageElement = document.getElementById('auth-message');
+            
             if (statusElement) {
-                statusElement.textContent = message;
-            } else {
-                console.warn('Auth status element not found');
+                statusElement.textContent = status || message;
+                
+                // Update status styling
+                statusElement.className = 'auth-status';
+                if (status) {
+                    statusElement.classList.add(status.toLowerCase());
+                }
             }
+            
+            if (messageElement && message) {
+                messageElement.textContent = message;
+            }
+        }
+        
+        function createAuthStatusElements() {
+            // Find QR container to add status elements
+            const qrContainer = document.getElementById('qr-code-container');
+            if (!qrContainer) return null;
+            
+            // Check if status container already exists
+            let statusContainer = document.getElementById('auth-status-container');
+            if (statusContainer) return document.getElementById('auth-status');
+            
+            // Create status container
+            statusContainer = document.createElement('div');
+            statusContainer.id = 'auth-status-container';
+            statusContainer.className = 'auth-status-container mt-4 text-center';
+            
+            // Create status element
+            const statusElement = document.createElement('div');
+            statusElement.id = 'auth-status';
+            statusElement.className = 'auth-status pending font-semibold py-2 px-4 rounded-lg mb-2';
+            statusElement.textContent = 'Waiting for authentication...';
+            
+            // Create message element
+            const messageElement = document.createElement('div');
+            messageElement.id = 'auth-message';
+            messageElement.className = 'auth-message text-gray-400 text-sm';
+            messageElement.textContent = 'Scan QR code with BLGV mobile app';
+            
+            // Append elements
+            statusContainer.appendChild(statusElement);
+            statusContainer.appendChild(messageElement);
+            
+            // Add to QR container parent
+            qrContainer.parentNode.appendChild(statusContainer);
+            
+            return statusElement;
+        }
+        
+        // Authentication monitoring with WebSocket and polling fallback
+        function initAuthenticationMonitoring(challengeId) {
+            console.log('🔄 Initializing authentication monitoring for:', challengeId);
+            
+            // Try WebSocket first
+            if (typeof io !== 'undefined') {
+                initWebSocketAuth(challengeId);
+            } else {
+                console.log('📡 WebSocket not available, using polling');
+                pollAuthStatus(challengeId);
+            }
+            
+            // Set QR expiry timeout
+            setTimeout(() => {
+                updateAuthStatus('expired', 'QR code expired. Please refresh to generate new code.');
+            }, 5 * 60 * 1000); // 5 minutes
+        }
+        
+        function initWebSocketAuth(challengeId) {
+            try {
+                const socket = io();
+                
+                socket.emit('join_auth_room', { challenge: challengeId });
+                
+                socket.on('auth_started', (data) => {
+                    updateAuthStatus('processing', 'Authenticating wallet...');
+                });
+                
+                socket.on('auth_success', (data) => {
+                    updateAuthStatus('connected', `✅ Connected! Miner ID: ${data.minerId}`);
+                    showAuthenticationSuccess(data);
+                });
+                
+                socket.on('auth_failed', (data) => {
+                    updateAuthStatus('failed', `❌ Authentication failed: ${data.error}`);
+                });
+                
+                socket.on('connect_error', () => {
+                    console.warn('WebSocket connection failed, falling back to polling');
+                    pollAuthStatus(challengeId);
+                });
+                
+                return socket;
+            } catch (error) {
+                console.warn('WebSocket setup failed:', error);
+                pollAuthStatus(challengeId);
+            }
+        }
+        
+        function pollAuthStatus(challengeId) {
+            console.log('📡 Starting authentication polling for:', challengeId);
+            
+            const pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/auth/check-status?challenge=${challengeId}`);
+                    const data = await response.json();
+                    
+                    if (data.authenticated) {
+                        updateAuthStatus('connected', `✅ Connected! Miner ID: ${data.minerId}`);
+                        clearInterval(pollInterval);
+                        showAuthenticationSuccess(data);
+                    } else if (data.status === 'processing') {
+                        updateAuthStatus('processing', 'Authenticating wallet...');
+                    }
+                } catch (error) {
+                    console.error('Polling error:', error);
+                }
+            }, 2000);
+            
+            // Stop polling after 5 minutes
+            setTimeout(() => {
+                clearInterval(pollInterval);
+                console.log('⏰ Authentication polling timeout');
+            }, 5 * 60 * 1000);
+            
+            return pollInterval;
+        }
+        
+        function showAuthenticationSuccess(authData) {
+            console.log('🎉 Authentication successful:', authData);
+            
+            // Update wallet state
+            if (authData.walletAddress) {
+                window.walletConnected = true;
+                window.walletAddress = authData.walletAddress;
+                
+                // Update header and drawer
+                showAuthenticatedContent(authData);
+            }
+            
+            // Close modal after 2 seconds
+            setTimeout(() => {
+                closeModal('wallet-modal');
+                showToast('Mining pool authentication successful!', 'success');
+                
+                // Refresh page to show authenticated state
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            }, 2000);
         }
         
         function regenerateQR() {
@@ -3701,12 +3911,15 @@ def miners_register():
         logger.error(f"Miner registration error: {e}")
         return jsonify({"error": "Registration failed"}), 500
 
-@app.route('/api/auth/check-status', methods=['POST'])
+@app.route('/api/auth/check-status', methods=['GET', 'POST'])
 def check_auth_status():
     """Check authentication status for QR code polling"""
     try:
-        data = request.get_json()
-        challenge = data.get('challenge')
+        if request.method == 'GET':
+            challenge = request.args.get('challenge')
+        else:
+            data = request.get_json()
+            challenge = data.get('challenge') if data else None
         
         if not challenge:
             return jsonify({'authenticated': False, 'error': 'No challenge provided'}), 400
