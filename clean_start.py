@@ -31,7 +31,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'blgv-mining-2025')
 
 # Pool statistics
-pool_stats = {
+pool_data = {
     'total_hashrate': 2847.3,
     'active_miners': 2156,
     'total_shares': 5892456,
@@ -50,6 +50,7 @@ MINING_POOL_HTML = '''<!DOCTYPE html>
     <title>BLGV BTC Mining Pool - Institutional Grade</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -331,11 +332,9 @@ MINING_POOL_HTML = '''<!DOCTYPE html>
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-18 md:h-20">
                 <!-- Logo and Brand -->
-                <div class="flex items-center space-x-2 md:space-x-4">
+                <div class="flex items-center space-x-3">
                     <img src="/static/bh-pool-logo.png" alt="BH Pool" class="h-12 md:h-14 w-auto object-contain">
-                    <div class="hidden sm:block text-sm md:text-lg font-semibold text-gray-300">Bitcoin Mining Pool</div>
                     <div class="status-online"></div>
-                    <div class="hidden md:block text-xs text-gray-400">v2.0.0 Institutional</div>
                 </div>
                 
                 <!-- Desktop Navigation -->
@@ -358,20 +357,88 @@ MINING_POOL_HTML = '''<!DOCTYPE html>
                             <div class="text-xs text-gray-400">#<span id="desktop-block-height">902,660</span></div>
                         </div>
                         
-                        <!-- Wallet Button -->
-                        <button onclick="toggleWalletDrawer()" class="flex items-center space-x-2 bg-red-600/20 border border-red-500 text-red-400 px-3 py-2 rounded-lg hover:bg-red-600/30 transition-colors text-sm">
-                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
-                            </svg>
-                            <span>Hub</span>
-                        </button>
+                        <!-- DEX-Style Wallet Dropdown -->
+                        <div class="relative" id="wallet-dropdown">
+                            <!-- Not Connected State -->
+                            <button id="wallet-connect-btn" onclick="openWalletModal()" class="flex items-center space-x-2 bg-red-600/20 border border-red-500 text-red-400 px-3 py-2 rounded-lg hover:bg-red-600/30 transition-colors text-sm">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+                                </svg>
+                                <span>Connect Wallet</span>
+                            </button>
+                            
+                            <!-- Connected State (Hidden by default) -->
+                            <div id="wallet-connected-dropdown" class="hidden relative">
+                                <button onclick="toggleWalletDropdown()" class="flex items-center space-x-2 bg-gray-800/50 border border-gray-600 text-white px-3 py-2 rounded-lg hover:bg-gray-700/50 transition-colors text-sm">
+                                    <svg class="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+                                    </svg>
+                                    <span id="wallet-address-short">bc1q...abc</span>
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                    </svg>
+                                </button>
+                                
+                                <!-- Dropdown Menu -->
+                                <div id="wallet-dropdown-menu" class="hidden absolute right-0 mt-2 w-80 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-50">
+                                    <div class="p-4">
+                                        <!-- Wallet Info -->
+                                        <div class="flex items-center justify-between mb-4">
+                                            <div class="flex items-center space-x-2">
+                                                <div class="w-8 h-8 bg-green-600/20 rounded-full flex items-center justify-center">
+                                                    <svg class="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 24 24">
+                                                        <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9z"/>
+                                                    </svg>
+                                                </div>
+                                                <div>
+                                                    <div class="text-white font-medium">Connected</div>
+                                                    <div class="text-xs text-gray-400" id="wallet-address-full">bc1q...abc</div>
+                                                </div>
+                                            </div>
+                                            <button onclick="disconnectWallet()" class="text-gray-400 hover:text-red-400 text-xs">
+                                                Disconnect
+                                            </button>
+                                        </div>
+                                        
+                                        <!-- Balance Display -->
+                                        <div class="bg-gray-800/50 rounded-lg p-3 mb-4">
+                                            <div class="text-xs text-gray-400 mb-2">Mining Earnings</div>
+                                            <div class="text-lg font-semibold text-white" id="wallet-balance">0.00000000 BTC</div>
+                                            <div class="text-xs text-gray-400" id="wallet-balance-usd">$0.00 USD</div>
+                                        </div>
+                                        
+                                        <!-- Quick Actions -->
+                                        <div class="space-y-2">
+                                            <button onclick="copyWalletAddress()" class="w-full flex items-center space-x-2 text-left text-gray-300 hover:text-white hover:bg-gray-800/50 rounded px-3 py-2 text-sm transition-colors">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                                                </svg>
+                                                <span>Copy Address</span>
+                                            </button>
+                                            <button onclick="viewOnBlockExplorer()" class="w-full flex items-center space-x-2 text-left text-gray-300 hover:text-white hover:bg-gray-800/50 rounded px-3 py-2 text-sm transition-colors">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                                                </svg>
+                                                <span>View on Explorer</span>
+                                            </button>
+                                            <button onclick="toggleWalletDrawer()" class="w-full flex items-center space-x-2 text-left text-gray-300 hover:text-white hover:bg-gray-800/50 rounded px-3 py-2 text-sm transition-colors">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                                                </svg>
+                                                <span>Mining Hub</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Mobile Controls -->
                     <div class="md:hidden flex items-center space-x-2">
-                        <!-- Mobile Hub Button -->
-                        <button onclick="toggleWalletDrawer()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg transition-colors text-sm font-medium">
-                            Hub
+                        <!-- Mobile Wallet Button -->
+                        <button id="mobile-wallet-btn" onclick="openWalletModal()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg transition-colors text-sm font-medium">
+                            Wallet
                         </button>
                         
                         <!-- Mobile Menu Button -->
@@ -1191,74 +1258,348 @@ MINING_POOL_HTML = '''<!DOCTYPE html>
         </div>
     </div>
 
-    <!-- Modals -->
-    <!-- Wallet Modal -->
+    <!-- DEX-Style Wallet Connection Modal -->
     <div id="wallet-modal" class="modal">
-        <div class="modal-content">
-            <div class="flex justify-between items-center mb-6">
-                <h3 class="text-xl font-semibold" data-translate="connect-wallet">Connect Wallet</h3>
-                <button onclick="closeModal('wallet-modal')" class="text-gray-400 hover:text-white">&times;</button>
+        <div class="modal-content bg-gray-900 border border-gray-700 max-w-md mx-auto">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between mb-6">
+                <h3 id="modal-title" class="text-xl font-semibold text-white">Connect Wallet</h3>
+                <button onclick="closeWalletModal()" class="text-gray-400 hover:text-white text-2xl">&times;</button>
             </div>
-            <div class="space-y-4">
-                <div class="form-group">
-                    <label class="form-label" data-translate="bitcoin-address">Bitcoin Address</label>
-                    <input type="text" id="modal-bitcoin-address" placeholder="bc1q..." class="form-input">
-                </div>
-                <div class="flex space-x-3">
-                    <button onclick="linkToDEX()" class="btn-primary flex-1" data-translate="link-dex">Link to DEX</button>
-                    <button onclick="discoverMiner()" class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-500" data-translate="discover-miners">Discover Miners</button>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <!-- QR Code Modal -->
-    <div id="qr-modal" class="modal">
-        <div class="modal-content text-center">
-            <div class="flex justify-between items-center mb-6">
-                <h3 class="text-xl font-semibold" data-translate="mining-qr">Mining QR Code</h3>
-                <button onclick="closeModal('qr-modal')" class="text-gray-400 hover:text-white">&times;</button>
-            </div>
-            <div id="qr-code-container" class="mb-4"></div>
-            <div id="qr-config-text" class="text-sm text-gray-400 font-mono bg-gray-800 p-4 rounded"></div>
-        </div>
-    </div>
-
-    <!-- Enhanced Wallet Drawer (Bitcoin Authentication Ready) -->
-    <div id="wallet-drawer" class="fixed inset-y-0 right-0 w-80 md:w-96 bg-gray-900/95 backdrop-blur-lg border-l border-gray-700 transform translate-x-full transition-transform duration-300 ease-in-out z-50 overflow-hidden">
-        <div class="h-full flex flex-col relative">
-            <!-- Drawer Header -->
-            <div class="flex items-center justify-between p-4 border-b border-gray-700/50">
-                <div class="flex items-center space-x-2">
-                    <div class="w-8 h-8 bg-gradient-to-br from-red-600 to-red-500 rounded-lg flex items-center justify-center">
-                        <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 2L2 7v10c0 1 9 4 10 4s10-3 10-4V7l-10-5z"/>
-                        </svg>
+            <!-- Step 1: Wallet Type Selection -->
+            <div id="wallet-type-selection" class="space-y-3">
+                <button onclick="selectWalletType('mobile')" class="w-full bg-gray-800 hover:bg-gray-700 p-4 rounded-lg text-left transition-all duration-200 border border-gray-600 hover:border-red-500">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 bg-red-600/20 rounded-lg flex items-center justify-center mr-4">
+                            <svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M7 4V2C7 1.45 7.45 1 8 1H16C16.55 1 17 1.45 17 2V4H20V6H4V4H7Z"/>
+                            </svg>
+                        </div>
+                        <div class="flex-1">
+                            <div class="font-medium text-white flex items-center">
+                                BLGV Mobile Wallet
+                                <span class="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">RECOMMENDED</span>
+                            </div>
+                            <div class="text-sm text-gray-400">Scan QR code with mobile app</div>
+                        </div>
                     </div>
-                    <div>
-                        <h2 class="text-lg font-semibold text-white">Mining Hub</h2>
-                        <div class="flex items-center text-xs text-green-400">
-                            <div class="w-1.5 h-1.5 bg-green-400 rounded-full mr-1 animate-pulse"></div>
-                            <span>Pool Connected</span>
+                </button>
+                
+                <button onclick="selectWalletType('desktop')" class="w-full bg-gray-800 hover:bg-gray-700 p-4 rounded-lg text-left transition-all duration-200 border border-gray-600 hover:border-red-500">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 bg-orange-600/20 rounded-lg flex items-center justify-center mr-4">
+                            <svg class="w-5 h-5 text-orange-400" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+                            </svg>
+                        </div>
+                        <div class="flex-1">
+                            <div class="font-medium text-white flex items-center">
+                                Desktop Wallet
+                                <span class="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">ADVANCED</span>
+                            </div>
+                            <div class="text-sm text-gray-400">Sparrow, Electrum, or hardware wallet</div>
+                        </div>
+                    </div>
+                </button>
+
+                <button onclick="selectWalletType('manual')" class="w-full bg-gray-800 hover:bg-gray-700 p-4 rounded-lg text-left transition-all duration-200 border border-gray-600 hover:border-red-500">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 bg-gray-600/20 rounded-lg flex items-center justify-center mr-4">
+                            <svg class="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                            </svg>
+                        </div>
+                        <div class="flex-1">
+                            <div class="font-medium text-white">Manual Entry</div>
+                            <div class="text-sm text-gray-400">Enter Bitcoin address manually</div>
+                        </div>
+                    </div>
+                </button>
+
+                <div class="mt-6 p-4 bg-gray-800 rounded-lg">
+                    <div class="flex items-start space-x-3">
+                        <svg class="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M13 9h-2V7h2m0 10h-2v-6h2m-1-9A10 10 0 0 0 2 12a10 10 0 0 0 10 10 10 10 0 0 0 10-10A10 10 0 0 0 12 2z"/>
+                        </svg>
+                        <div class="text-sm text-gray-300">
+                            <p class="font-medium mb-1">Non-custodial Mining</p>
+                            <p>Your keys, your Bitcoin. We never hold your funds.</p>
                         </div>
                     </div>
                 </div>
-                <button onclick="closeWalletDrawer()" class="w-8 h-8 bg-gray-700/50 hover:bg-gray-600/50 rounded-lg flex items-center justify-center transition-all duration-200">
-                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            </div>
+
+            <!-- Step 2: QR Code Authentication -->
+            <div id="qr-authentication" class="hidden text-center">
+                <div class="mb-4">
+                    <button onclick="showWalletTypeSelection()" class="text-red-400 text-sm hover:text-red-300 flex items-center">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                        </svg>
+                        Back to wallet selection
+                    </button>
+                </div>
+                
+                <div class="bg-white p-6 rounded-lg mx-auto inline-block mb-4">
+                    <div id="qr-code-container" class="w-48 h-48 flex items-center justify-center">
+                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
+                    </div>
+                </div>
+                
+                <div class="space-y-3">
+                    <h4 class="text-lg font-medium text-white">Scan with BLGV Mobile App</h4>
+                    <div class="text-sm text-gray-300 space-y-1">
+                        <p>1. Open BLGV Mobile App</p>
+                        <p>2. Tap "Scan QR Code"</p>
+                        <p>3. Sign the authentication message</p>
+                    </div>
+                    
+                    <div id="auth-status-display" class="mt-4 p-3 bg-gray-800 rounded-lg">
+                        <div class="flex items-center justify-center space-x-2">
+                            <div class="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                            <span class="text-yellow-400 text-sm">Waiting for authentication...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex space-x-3">
+                    <button onclick="regenerateQR()" class="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg text-sm">
+                        Regenerate QR
+                    </button>
+                    <button onclick="showManualEntry()" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg text-sm">
+                        Manual Entry
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 3: Manual Entry -->
+            <div id="manual-entry" class="hidden space-y-4">
+                <div class="mb-4">
+                    <button onclick="showWalletTypeSelection()" class="text-red-400 text-sm hover:text-red-300 flex items-center">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                        </svg>
+                        Back to wallet selection
+                    </button>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Bitcoin Address</label>
+                    <input 
+                        type="text" 
+                        id="manual-bitcoin-address" 
+                        placeholder="bc1q..." 
+                        class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:border-red-500 focus:outline-none"
+                    >
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Message Signature</label>
+                    <textarea 
+                        id="manual-signature" 
+                        placeholder="Paste signature from your wallet..." 
+                        rows="3"
+                        class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:border-red-500 focus:outline-none resize-none"
+                    ></textarea>
+                </div>
+
+                <div class="bg-gray-800 rounded-lg p-3">
+                    <p class="text-xs text-gray-400 mb-2">Message to sign:</p>
+                    <div class="bg-gray-900 rounded px-2 py-1 font-mono text-xs text-gray-300" id="sign-message">
+                        BLGV Mining Pool Authentication<br>
+                        Challenge: <span id="challenge-text">Loading...</span><br>
+                        Timestamp: <span id="timestamp-text">Loading...</span>
+                    </div>
+                </div>
+
+                <button onclick="verifyManualSignature()" id="verify-button" class="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white py-2 px-4 rounded-lg text-sm transition-colors">
+                    Verify Signature
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DEX-Style Wallet Drawer (My Hub) -->
+    <div id="wallet-drawer" class="fixed inset-y-0 right-0 w-80 md:w-96 bg-gray-900/95 backdrop-blur-lg border-l border-gray-700 transform translate-x-full transition-transform duration-300 ease-in-out z-50 overflow-y-auto">
+        <div class="h-full flex flex-col">
+            <!-- Header - Exact DEX Style -->
+            <div class="flex items-center justify-between p-4 border-b border-gray-700">
+                <div class="flex items-center space-x-2">
+                    <svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+                    </svg>
+                    <h2 class="text-lg font-semibold text-white">My Hub</h2>
+                </div>
+                <button onclick="closeWalletDrawer()" class="text-gray-400 hover:text-white transition-colors p-1 rounded hover:bg-gray-800">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
                 </button>
             </div>
+            
+            <!-- Content Area -->
+            <div class="flex-1 overflow-y-auto">
+                <!-- Wallet Connection Section -->
+                <div class="p-4 border-b border-gray-700/50" id="wallet-connection-section">
+                    <!-- Disconnected State (Default) -->
+                    <div id="disconnected-wallet" class="space-y-3">
+                        <div class="text-sm text-gray-400">Wallet Status</div>
+                        <div class="text-center py-6">
+                            <svg class="w-12 h-12 text-gray-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+                            </svg>
+                            <div class="text-gray-400 text-sm mb-3">No wallet connected</div>
+                            <button onclick="openWalletModal()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-medium">
+                                Connect Wallet
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Connected State (Hidden by default) -->
+                    <div id="connected-wallet" class="hidden">
+                        <div class="text-sm text-gray-400 mb-2">Connected</div>
+                        <div class="flex items-center justify-between">
+                            <div class="font-mono text-sm text-white bg-gray-800/50 px-3 py-2 rounded border border-gray-600" id="connected-wallet-address">
+                                <!-- Address populated on connection -->
+                            </div>
+                            <div class="px-2 py-1 bg-green-600/20 border border-green-500/30 text-green-400 text-xs rounded-full">
+                                Segwit
+                            </div>
+                        </div>
+                        <div class="flex space-x-2 mt-3">
+                            <button onclick="copyWalletAddress()" class="text-xs text-gray-400 hover:text-white transition-colors">Copy</button>
+                            <button onclick="viewOnExplorer()" class="text-xs text-gray-400 hover:text-white transition-colors">Explorer</button>
+                            <button onclick="disconnectWallet()" class="text-xs text-red-400 hover:text-red-300 transition-colors">Disconnect</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Balances Section -->
+                <div class="border-b border-gray-700/50">
+                    <button onclick="toggleSection('balances')" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-800/30 transition-colors">
+                        <div class="flex items-center space-x-2">
+                            <svg class="w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M7 4V2C7 1.45 7.45 1 8 1S9 1.55 9 2V4H15V2C15 1.45 15.45 1 16 1S17 1.55 17 2V4H20C21.11 4 22 4.89 22 6V20C22 21.11 21.11 22 20 22H4C2.89 22 2 21.11 2 20V6C2 4.89 2.89 4 4 4H7M20 10H4V20H20V10Z"/>
+                            </svg>
+                            <span class="text-white font-medium">Balances</span>
+                        </div>
+                        <svg class="w-4 h-4 text-gray-400 transform transition-transform" id="balances-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                    <div id="balances-section" class="px-4 pb-4">
+                        <div class="text-gray-400 text-sm">No balances available</div>
+                    </div>
+                </div>
+                
+                <!-- Earnings Section -->
+                <div class="border-b border-gray-700/50">
+                    <button onclick="toggleSection('earnings')" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-800/30 transition-colors">
+                        <div class="flex items-center space-x-2">
+                            <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+                            </svg>
+                            <span class="text-white font-medium">Earnings</span>
+                        </div>
+                        <svg class="w-4 h-4 text-gray-400 transform transition-transform" id="earnings-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                    <div id="earnings-section" class="px-4 pb-4">
+                        <div class="flex justify-between text-center">
+                            <div>
+                                <div class="text-gray-400 text-sm">24h</div>
+                                <div class="text-white font-semibold">0.00</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-400 text-sm">7d</div>
+                                <div class="text-white font-semibold">0.00</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Mining & Voting Section -->
+                <div class="border-b border-gray-700/50">
+                    <button onclick="toggleSection('mining')" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-800/30 transition-colors">
+                        <div class="flex items-center space-x-2">
+                            <svg class="w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                            </svg>
+                            <span class="text-white font-medium">Mining & Voting</span>
+                        </div>
+                        <svg class="w-4 h-4 text-gray-400 transform transition-transform" id="mining-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                    <div id="mining-section" class="px-4 pb-4 space-y-4">
+                        <div class="flex justify-between text-center">
+                            <div>
+                                <div class="text-gray-400 text-sm">Voting Power</div>
+                                <div class="text-white font-semibold">0</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-400 text-sm">Active Stakes</div>
+                                <div class="text-white font-semibold">0</div>
+                            </div>
+                        </div>
+                        <button class="w-full bg-gradient-to-r from-purple-600 to-purple-500 text-white py-2 px-4 rounded-lg text-sm font-medium hover:from-purple-700 hover:to-purple-600 transition-all">
+                            Stake BLGVF
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- BLGV Ecosystem Section (Last) -->
+                <div class="border-b border-gray-700/50">
+                    <button onclick="toggleSection('ecosystem')" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-800/30 transition-colors">
+                        <div class="flex items-center space-x-2">
+                            <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                            </svg>
+                            <span class="text-white font-medium">BLGV Ecosystem</span>
+                        </div>
+                        <svg class="w-4 h-4 text-gray-400 transform transition-transform" id="ecosystem-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                    <div id="ecosystem-section" class="px-4 pb-4 space-y-3">
+                        <div class="flex items-center justify-between py-2">
+                            <span class="text-gray-300">Treasury</span>
+                            <div class="px-2 py-1 bg-green-600/20 border border-green-500/30 text-green-400 text-xs rounded-full">Live</div>
+                        </div>
+                        <div class="flex items-center justify-between py-2">
+                            <span class="text-gray-300">DEX</span>
+                            <div class="px-2 py-1 bg-green-600/20 border border-green-500/30 text-green-400 text-xs rounded-full">Active</div>
+                        </div>
+                        <div class="flex items-center justify-between py-2">
+                            <span class="text-gray-300">Mobile App</span>
+                            <div class="px-2 py-1 bg-green-600/20 border border-green-500/30 text-green-400 text-xs rounded-full">Synced</div>
+                        </div>
+                        <div class="flex items-center justify-between py-2">
+                            <span class="text-gray-300">Mining Pool</span>
+                            <div class="px-2 py-1 bg-green-600/20 border border-green-500/30 text-green-400 text-xs rounded-full">Connected</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-            <!-- Mobile Authentication Section -->
+            <!-- Mobile Wallet Connection -->
             <div class="p-4 border-b border-gray-700/50">
                 <div class="bg-gradient-to-br from-gray-800/40 to-gray-900/20 border border-gray-600/30 rounded-lg p-4">
                     <div class="flex items-center justify-between mb-3">
-                        <span class="text-gray-300 text-sm font-medium">🔗 Mobile Wallet</span>
+                        <div class="flex items-center space-x-2">
+                            <svg class="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M7 4V2C7 1.45 7.45 1 8 1H16C16.55 1 17 1.45 17 2V4H20V6H4V4H7ZM8 3V4H16V3H8ZM19 8V21C19 21.55 18.55 22 18 22H6C5.45 22 5 21.55 5 21V8H19ZM8 10V20H10V10H8ZM12 10V20H14V10H12ZM16 10V20H18V10H16Z"/>
+                            </svg>
+                            <span class="text-gray-300 text-sm font-medium">Mobile Wallet</span>
+                        </div>
                         <span id="auth-status" class="bg-gray-600/20 border border-gray-500/30 text-gray-400 text-xs px-2 py-1 rounded-full">Disconnected</span>
                     </div>
                     
-                    <button onclick="window.open('/auth', '_blank')" class="w-full bg-red-600/20 hover:bg-red-600/30 text-red-400 py-3 px-4 rounded-lg text-sm transition-colors flex items-center justify-center space-x-2 border border-red-500/30">
+                    <button onclick="openWalletModal()" class="w-full bg-red-600/20 hover:bg-red-600/30 text-red-400 py-3 px-4 rounded-lg text-sm transition-colors flex items-center justify-center space-x-2 border border-red-500/30">
                         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M3 5v6h1l2 6h8l2-6h1V5H3zm2 10l-1-3h12l-1 3H5z"/>
                         </svg>
@@ -1271,166 +1612,119 @@ MINING_POOL_HTML = '''<!DOCTYPE html>
                 </div>
             </div>
 
-            <!-- Mining Wallet Status -->
-            <div class="p-3 border-b border-gray-700/50">
-                <div class="bg-gradient-to-br from-green-900/30 to-emerald-900/20 border border-green-500/30 rounded-lg p-3">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-gray-300 text-sm font-medium">⛏️ Mining Wallet</span>
-                        <span class="bg-green-600/20 border border-green-500/30 text-green-400 text-xs px-2 py-0.5 rounded-full">Active</span>
-                    </div>
+
+
+            <!-- Scrollable Content Area -->
+            <div class="flex-1 overflow-y-auto" style="scrollbar-width: none; -ms-overflow-style: none;">
+                <style>
+                    .drawer-scroll::-webkit-scrollbar { display: none; }
+                </style>
+                <div class="drawer-scroll space-y-4 p-4">
                     
-                    <div class="bg-gray-900/40 rounded p-2 mb-2">
-                        <div class="text-xs text-gray-300 font-mono" id="connected-wallet">bc1q...loading</div>
-                    </div>
-                    
-                    <div class="grid grid-cols-2 gap-2 text-xs">
-                        <div>
-                            <span class="text-gray-400">Pool Fee</span>
-                            <span class="text-red-400 font-semibold ml-1">2.0%</span>
+                    <!-- Wallet Not Connected Message -->
+                    <div id="wallet-not-connected" class="bg-gradient-to-br from-gray-800/60 to-gray-900/40 border border-gray-600/50 rounded-lg p-4 text-center">
+                        <div class="mb-3">
+                            <svg class="w-12 h-12 text-gray-400 mx-auto mb-2" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M19 7H18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a3 3 0 0 0 3 3h13a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1zM4 6h12v1H4V6zm15 12H5a1 1 0 0 1-1-1V9h15v9z"/>
+                            </svg>
+                            <h3 class="text-white font-semibold mb-2">Connect Your Wallet</h3>
+                            <p class="text-gray-400 text-sm mb-4">Scan the QR code above with BLGV Mobile App to view your mining data, earnings, and performance metrics.</p>
                         </div>
-                        <div>
-                            <span class="text-gray-400">Method</span>
-                            <span class="text-blue-400 font-semibold ml-1">PPS+</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Compact Mining Wallet -->
-            <div class="p-3 border-b border-gray-700/50">
-                <div class="bg-gradient-to-br from-gray-800/40 to-gray-900/20 border border-gray-600/30 rounded-lg p-3">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-gray-300 text-sm font-medium">Mining Wallet</span>
-                        <span class="bg-green-600/20 border border-green-500/30 text-green-400 text-xs px-2 py-0.5 rounded-full">Connected</span>
-                    </div>
-                    
-                    <div class="bg-gray-900/40 rounded p-2 mb-2">
-                        <div class="text-xs text-gray-300 font-mono">bc1qxy...fjhx0wlh</div>
-                    </div>
-                    
-                    <div class="grid grid-cols-2 gap-2 text-xs">
-                        <div>
-                            <span class="text-gray-400">Fee</span>
-                            <span class="text-red-400 font-semibold ml-1">2.0%</span>
-                        </div>
-                        <div>
-                            <span class="text-gray-400">Method</span>
-                            <span class="text-blue-400 font-semibold ml-1">PPS+</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-
-
-            <!-- Core Mining Quick Access -->
-            <div class="flex-1 overflow-y-auto">
-                <!-- Current Earnings Card -->
-                <div class="p-4 m-4 bg-gradient-to-br from-green-900/30 to-emerald-900/20 border border-green-500/30 rounded-xl">
-                    <div class="flex items-center justify-between mb-3">
-                        <h3 class="text-white font-semibold">Today's Earnings</h3>
-                        <svg class="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/>
-                        </svg>
-                    </div>
-                    <div class="text-2xl font-bold text-green-400 mb-1">0.00847 BTC</div>
-                    <div class="text-sm text-gray-400">Next payout: 23h 47m</div>
-                </div>
-
-                <!-- Hash Rental Quick Access -->
-                <div class="p-4 m-4 bg-gradient-to-br from-orange-900/30 to-red-900/20 border border-orange-500/30 rounded-xl">
-                    <div class="flex items-center justify-between mb-3">
-                        <h3 class="text-white font-semibold">Hash Rentals</h3>
-                        <svg class="w-5 h-5 text-orange-400" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                        </svg>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2 mb-3">
-                        <button onclick="showSection('marketplace')" class="bg-orange-600/20 hover:bg-orange-600/30 text-orange-400 py-2 px-3 rounded-lg text-sm transition-colors">
-                            Rent Hash
-                        </button>
-                        <button onclick="showSection('marketplace')" class="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 py-2 px-3 rounded-lg text-sm transition-colors">
-                            Offer Hash
+                        <button onclick="openWalletModal()" class="bg-red-600/20 hover:bg-red-600/30 text-red-400 py-2 px-4 rounded-lg text-sm transition-colors border border-red-500/30">
+                            Open QR Code
                         </button>
                     </div>
-                    <div class="text-xs text-gray-400 text-center">
-                        Boost earnings or monetize excess capacity
-                    </div>
-                </div>
 
-                <!-- Mining Performance Overview -->
-                <div class="p-4 m-4 bg-gradient-to-br from-blue-900/30 to-cyan-900/20 border border-blue-500/30 rounded-xl">
-                    <div class="flex items-center justify-between mb-3">
-                        <h3 class="text-white font-semibold">Mining Performance</h3>
-                        <svg class="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/>
-                        </svg>
-                    </div>
-                    <div class="grid grid-cols-2 gap-3 text-sm">
-                        <div>
-                            <div class="text-gray-400">Hash Rate</div>
-                            <div class="text-blue-400 font-semibold">111.0 TH/s</div>
+                    <!-- Authenticated Content (Hidden by default) -->
+                    <div id="authenticated-content" class="space-y-4" style="display: none;">
+                        <!-- Today's Earnings -->
+                        <div class="bg-gradient-to-br from-gray-800/60 to-gray-900/40 border border-gray-600/50 rounded-lg p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <h3 class="text-white font-semibold">Today's Earnings</h3>
+                                <span class="text-green-400 text-lg">$</span>
+                            </div>
+                            <div class="mb-2">
+                                <div class="text-2xl font-bold text-green-400" id="user-earnings">0.00000 BTC</div>
+                                <div class="text-xs text-gray-400" id="next-payout">Next payout: calculating...</div>
+                            </div>
                         </div>
-                        <div>
-                            <div class="text-gray-400">Efficiency</div>
-                            <div class="text-green-400 font-semibold">98.7%</div>
-                        </div>
-                        <div>
-                            <div class="text-gray-400">Pool Share</div>
-                            <div class="text-white font-semibold">0.016%</div>
-                        </div>
-                        <div>
-                            <div class="text-gray-400">Pool Luck</div>
-                            <div class="text-green-400 font-semibold">102.3%</div>
-                        </div>
-                    </div>
-                </div>
 
-                <!-- Ecosystem Quick Links -->
-                <div class="p-4 m-4 bg-gradient-to-br from-purple-900/30 to-pink-900/20 border border-purple-500/30 rounded-xl">
-                    <div class="flex items-center justify-between mb-3">
-                        <h3 class="text-white font-semibold">BLGV Ecosystem</h3>
-                        <div class="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
+                        <!-- Mining Performance -->
+                        <div class="bg-gradient-to-br from-gray-800/60 to-gray-900/40 border border-gray-600/50 rounded-lg p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <h3 class="text-white font-semibold">Mining Performance</h3>
+                                <span class="text-blue-400">📈</span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3 text-sm">
+                                <div>
+                                    <div class="text-gray-400">Hash Rate</div>
+                                    <div class="text-blue-400 font-semibold" id="user-hashrate">0.0 TH/s</div>
+                                </div>
+                                <div>
+                                    <div class="text-gray-400">Efficiency</div>
+                                    <div class="text-green-400 font-semibold" id="user-efficiency">0.0%</div>
+                                </div>
+                                <div>
+                                    <div class="text-gray-400">Workers</div>
+                                    <div class="text-white font-semibold" id="user-workers">0</div>
+                                </div>
+                                <div>
+                                    <div class="text-gray-400">Status</div>
+                                    <div class="text-gray-400 font-semibold" id="user-status">Offline</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="space-y-2">
-                        <button onclick="window.open('https://dex.blgvbtc.com', '_blank')" class="w-full bg-red-600/20 hover:bg-red-600/30 text-red-400 py-2 px-3 rounded-lg text-sm transition-colors flex items-center justify-center space-x-2">
+
+                    <!-- Hash Rentals (Always visible) -->
+                    <div class="bg-gradient-to-br from-gray-800/60 to-gray-900/40 border border-gray-600/50 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-white font-semibold">Hash Rentals</h3>
+                            <span class="text-orange-400">⭐</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 mb-3">
+                            <button onclick="rentHashpower()" class="bg-orange-600/20 hover:bg-orange-600/30 text-orange-400 py-2 px-3 rounded text-sm transition-colors border border-orange-500/30">
+                                Rent Hash
+                            </button>
+                            <button onclick="offerHashpower()" class="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 py-2 px-3 rounded text-sm transition-colors border border-blue-500/30">
+                                Offer Hash
+                            </button>
+                        </div>
+                        <div class="text-xs text-gray-400">
+                            Boost earnings or monetize excess capacity
+                        </div>
+                    </div>
+
+                    <!-- BLGV Ecosystem (Always visible) -->
+                    <div class="bg-gradient-to-br from-red-900/30 to-red-800/20 border border-red-500/30 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-white font-semibold">BLGV Ecosystem</h3>
+                            <span class="text-red-400">🔴</span>
+                        </div>
+                        <button onclick="window.open('https://dex.blgvbtc.com', '_blank')" class="w-full bg-red-600/20 hover:bg-red-600/30 text-red-400 py-2 px-3 rounded text-sm transition-colors flex items-center justify-center space-x-2 border border-red-500/30 mb-2">
                             <span>Trade on DEX</span>
                             <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.11 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>
                             </svg>
                         </button>
-                        <div class="text-xs text-gray-400 text-center">
-                            Auto-deposit enabled • Intelligence Platform synced
+                        <div class="text-xs text-gray-400">
+                            Connect wallet to enable auto-deposit and sync
                         </div>
                     </div>
                 </div>
             </div>
 
-                <!-- Bottom padding for scroll clearance -->
-                <div class="pb-20"></div>
-            </div>
 
-        <!-- Compact Bottom Actions -->
-        <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-gray-900 via-gray-900/95 to-gray-900/80 p-3 border-t border-gray-700/50">
-            <div class="grid grid-cols-3 gap-2">
-                <button onclick="copyWalletAddress()" class="flex items-center justify-center bg-gray-700/60 hover:bg-gray-600/60 text-white py-2 rounded-lg transition-colors text-xs">
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                    </svg>
-                </button>
-                <button onclick="viewOnExplorer()" class="flex items-center justify-center bg-gray-700/60 hover:bg-gray-600/60 text-white py-2 rounded-lg transition-colors text-xs">
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.11 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>
-                    </svg>
-                </button>
-                <button onclick="showSection('analytics')" class="flex items-center justify-center bg-red-600/80 hover:bg-red-700/80 text-white py-2 rounded-lg transition-colors text-xs">
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/>
-                    </svg>
-                </button>
-            </div>
         </div>
     </div>
+
+    <!-- End of Enhanced Wallet Drawer -->
+
+
+
+
+
+
 
     <!-- Mobile Menu Toggle Button (positioned like DEX) -->
     <button id="mobile-drawer-toggle" onclick="toggleWalletDrawer()" class="fixed bottom-6 right-6 w-14 h-14 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center text-white shadow-lg transition-all duration-300 z-50">
@@ -1535,6 +1829,10 @@ MINING_POOL_HTML = '''<!DOCTYPE html>
             initializeApp();
         });
 
+        // Authentication state
+        let isAuthenticated = false;
+        let currentWalletAddress = null;
+
         function initializeApp() {
             loadStats();
             setupEventListeners();
@@ -1542,6 +1840,63 @@ MINING_POOL_HTML = '''<!DOCTYPE html>
             updateRewardInfo();
             updateNodeInfo();
             showToast('Welcome to BLGV BTC Mining Pool!', 'success');
+            
+            // Initialize drawer authentication state
+            hideAuthenticatedContent();
+        }
+
+        function showAuthenticatedContent() {
+            document.getElementById('wallet-not-connected').style.display = 'none';
+            document.getElementById('authenticated-content').style.display = 'block';
+        }
+
+        function hideAuthenticatedContent() {
+            document.getElementById('wallet-not-connected').style.display = 'block';
+            document.getElementById('authenticated-content').style.display = 'none';
+        }
+
+        function loadUserMiningData(walletAddress) {
+            // Fetch user-specific mining data from API
+            fetch(`/api/miner/${walletAddress}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updateUserEarnings(data.earnings || 0);
+                        updateUserPerformance(data.hashrate || 0, data.efficiency || 0, data.workers || 0, data.status || 'offline');
+                    }
+                })
+                .catch(error => {
+                    console.error('Failed to load user mining data:', error);
+                    // Reset to defaults on error
+                    updateUserEarnings(0);
+                    updateUserPerformance(0, 0, 0, 'offline');
+                });
+        }
+
+        function updateUserEarnings(earnings) {
+            document.getElementById('user-earnings').textContent = earnings.toFixed(8) + ' BTC';
+            
+            // Calculate next payout time based on earnings
+            if (earnings > 0) {
+                document.getElementById('next-payout').textContent = 'Next payout: 23h 47m';
+            } else {
+                document.getElementById('next-payout').textContent = 'Start mining to earn rewards';
+            }
+        }
+
+        function updateUserPerformance(hashrate, efficiency, workers, status) {
+            document.getElementById('user-hashrate').textContent = hashrate.toFixed(1) + ' TH/s';
+            document.getElementById('user-efficiency').textContent = efficiency.toFixed(1) + '%';
+            document.getElementById('user-workers').textContent = workers.toString();
+            document.getElementById('user-status').textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            
+            // Update status color
+            const statusElement = document.getElementById('user-status');
+            if (status === 'online' || status === 'active') {
+                statusElement.className = 'text-green-400 font-semibold';
+            } else {
+                statusElement.className = 'text-gray-400 font-semibold';
+            }
         }
 
         // Navigation functions
@@ -1973,8 +2328,472 @@ ordinals_mining: ${ordinals}
             document.getElementById(modalId).classList.remove('show');
         }
 
-        function showWalletModal() {
+        function openWalletModal() {
+            showWalletTypeSelection();
             showModal('wallet-modal');
+        }
+        
+        function closeWalletModal() {
+            closeModal('wallet-modal');
+            // Reset to first step when closing
+            showWalletTypeSelection();
+        }
+        
+        // DEX-Style Modal Navigation Functions
+        function showWalletTypeSelection() {
+            hideAllModalSteps();
+            document.getElementById('wallet-type-selection').classList.remove('hidden');
+            document.getElementById('modal-title').textContent = 'Connect Wallet';
+        }
+        
+        function showQRAuthentication() {
+            hideAllModalSteps();
+            document.getElementById('qr-authentication').classList.remove('hidden');
+            document.getElementById('modal-title').textContent = 'Scan QR Code';
+            generateAuthenticationQR();
+        }
+        
+        function showManualEntry() {
+            hideAllModalSteps();
+            document.getElementById('manual-entry').classList.remove('hidden');
+            document.getElementById('modal-title').textContent = 'Manual Authentication';
+            generateAuthenticationChallenge();
+        }
+        
+        function hideAllModalSteps() {
+            document.getElementById('wallet-type-selection').classList.add('hidden');
+            document.getElementById('qr-authentication').classList.add('hidden');
+            document.getElementById('manual-entry').classList.add('hidden');
+        }
+        
+        // DEX-Style Wallet Type Selection
+        function selectWalletType(type) {
+            switch(type) {
+                case 'mobile':
+                    showQRAuthentication();
+                    break;
+                case 'desktop':
+                    showQRAuthentication(); // Desktop wallets also use QR for authentication
+                    break;
+                case 'manual':
+                    showManualEntry();
+                    break;
+            }
+        }
+        
+        // Generate Authentication QR Code (DEX-Style)
+        async function generateAuthenticationQR() {
+            console.log('🔄 Generating DEX-style authentication QR code...');
+            
+            try {
+                // Generate challenge for mining pool
+                const timestamp = Date.now();
+                const challenge = `BLGV-MINING-AUTH-${timestamp}-${Math.random().toString(36).substr(2, 15)}`;
+                
+                // Store challenge globally for polling
+                window.currentAuthChallenge = {
+                    challenge: challenge,
+                    timestamp: timestamp,
+                    platform: 'mining_pool',
+                    expires: timestamp + (5 * 60 * 1000)
+                };
+                
+                // Create authentication payload exactly like DEX
+                const authPayload = JSON.stringify({
+                    action: 'connect_wallet',
+                    platform: 'mining_pool',
+                    challenge: challenge,
+                    timestamp: timestamp,
+                    endpoint: `${window.location.origin}/api/auth/bitcoin-wallet`,
+                    expires: timestamp + (5 * 60 * 1000)
+                });
+                
+                console.log('🔗 Auth payload created:', authPayload);
+                
+                // Get QR container
+                const qrContainer = document.getElementById('qr-code-container');
+                if (!qrContainer) {
+                    throw new Error('QR container not found');
+                }
+                
+                // Clear container
+                qrContainer.innerHTML = '';
+                
+                // Wait for QRCode library to load with retries
+                let attempts = 0;
+                const maxAttempts = 10;
+                
+                const waitForQRCode = () => {
+                    // Use QR API service instead of client-side library
+                    console.log('🌐 Using QR API service for reliable generation...');
+                    generateQRCodeWithAPI();
+                };
+                
+                const generateQRCodeWithAPI = () => {
+                    try {
+                        console.log('🎯 Generating QR with API service...');
+                        
+                        // Create image element for QR code
+                        const qrImage = document.createElement('img');
+                        qrImage.style.width = '192px';
+                        qrImage.style.height = '192px';
+                        qrImage.style.border = '8px solid white';
+                        qrImage.style.borderRadius = '8px';
+                        
+                        // Use QR Server API for reliable generation
+                        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=192x192&data=${encodeURIComponent(authPayload)}`;
+                        qrImage.src = qrUrl;
+                        
+                        qrImage.onload = () => {
+                            console.log('✅ QR Code generated successfully via API');
+                            qrContainer.appendChild(qrImage);
+                            updateAuthStatus('waiting', 'Waiting for mobile app authentication...');
+                            startAuthenticationPolling(challenge);
+                        };
+                        
+                        qrImage.onerror = () => {
+                            console.error('❌ QR API generation failed');
+                            showFallbackQR();
+                        };
+                        
+                    } catch (apiError) {
+                        console.error('❌ QR API error:', apiError);
+                        showFallbackQR();
+                    }
+                };
+                
+                const showFallbackQR = () => {
+                    qrContainer.innerHTML = `
+                        <div class="w-48 h-48 bg-white rounded-lg flex items-center justify-center text-black">
+                            <div class="text-center">
+                                <div class="text-3xl mb-2">⚡</div>
+                                <div class="font-semibold">Mining Pool Auth</div>
+                                <div class="text-xs mt-1">${challenge.substring(0, 15)}...</div>
+                            </div>
+                        </div>
+                    `;
+                    updateAuthStatus('waiting', 'Waiting for mobile app authentication...');
+                    startAuthenticationPolling(challenge);
+                };
+                
+                // Start the QRCode loading check
+                waitForQRCode();
+                
+            } catch (error) {
+                console.error('❌ QR generation error:', error);
+                updateAuthStatus('error', 'Failed to generate QR code');
+            }
+        }
+        
+        // Generate Manual Authentication Challenge
+        function generateAuthenticationChallenge() {
+            const challenge = 'blgv_mining_' + Math.random().toString(36).substring(2, 15);
+            const timestamp = Date.now();
+            
+            document.getElementById('challenge-text').textContent = challenge;
+            document.getElementById('timestamp-text').textContent = new Date(timestamp).toISOString();
+            
+            // Store challenge for verification
+            window.currentAuthChallenge = {
+                challenge: challenge,
+                timestamp: timestamp,
+                platform: 'mining_pool'
+            };
+        }
+        
+        // Authentication Polling (DEX-Style)
+        function startAuthenticationPolling(challenge) {
+            let pollCount = 0;
+            const maxPolls = 60; // 5 minutes max
+            
+            const pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch('/api/auth/check-status', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ challenge: challenge })
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        if (result.authenticated) {
+                            clearInterval(pollInterval);
+                            handleSuccessfulAuthentication(result);
+                            return;
+                        }
+                    }
+                    
+                    pollCount++;
+                    if (pollCount >= maxPolls) {
+                        clearInterval(pollInterval);
+                        updateAuthStatus('expired', 'Authentication expired. Please try again.');
+                    }
+                    
+                } catch (error) {
+                    console.error('Authentication polling error:', error);
+                }
+            }, 5000); // Poll every 5 seconds
+        }
+        
+        // Handle Successful Authentication (DEX-Style)
+        function handleSuccessfulAuthentication(authResult) {
+            // Update authentication status
+            updateAuthStatus('connected', authResult.walletAddress);
+            
+            // Show success message
+            updateAuthStatus('success', 'Authentication successful!');
+            
+            // Close modal after delay
+            setTimeout(() => {
+                closeWalletModal();
+                showToast('Wallet connected successfully!', 'success');
+                
+                // Update wallet drawer with authenticated data
+                showAuthenticatedContent(authResult);
+            }, 2000);
+        }
+        
+        // Verify Manual Signature (DEX-Style)
+        async function verifyManualSignature() {
+            const address = document.getElementById('manual-bitcoin-address').value;
+            const signature = document.getElementById('manual-signature').value;
+            
+            if (!address || !signature) {
+                showToast('Please fill in all fields', 'error');
+                return;
+            }
+            
+            if (!window.currentAuthChallenge) {
+                showToast('No active challenge. Please regenerate.', 'error');
+                return;
+            }
+            
+            const verifyButton = document.getElementById('verify-button');
+            verifyButton.disabled = true;
+            verifyButton.textContent = 'Verifying...';
+            
+            try {
+                const response = await fetch('/api/auth/bitcoin-wallet', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        walletAddress: address,
+                        signature: signature,
+                        challenge: window.currentAuthChallenge.challenge,
+                        timestamp: window.currentAuthChallenge.timestamp
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    handleSuccessfulAuthentication({
+                        walletAddress: address,
+                        sessionToken: result.sessionToken
+                    });
+                } else {
+                    showToast(result.error || 'Authentication failed', 'error');
+                }
+                
+            } catch (error) {
+                console.error('Verification error:', error);
+                showToast('Verification failed. Please try again.', 'error');
+            } finally {
+                verifyButton.disabled = false;
+                verifyButton.textContent = 'Verify Signature';
+            }
+        }
+        
+        // Regenerate QR Code
+        function regenerateQR() {
+            generateAuthenticationQR();
+            showToast('QR code regenerated', 'info');
+        }
+        
+        // Update Auth Status Display
+        function updateAuthStatus(status, message) {
+            const statusDisplay = document.getElementById('auth-status-display');
+            const statusElement = document.getElementById('auth-status');
+            
+            if (statusDisplay) {
+                let statusClass, statusIcon;
+                
+                switch(status) {
+                    case 'waiting':
+                        statusClass = 'text-yellow-400';
+                        statusIcon = '<div class="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>';
+                        break;
+                    case 'processing':
+                        statusClass = 'text-blue-400';
+                        statusIcon = '<div class="w-2 h-2 bg-blue-400 rounded-full animate-spin"></div>';
+                        break;
+                    case 'success':
+                        statusClass = 'text-green-400';
+                        statusIcon = '<div class="w-2 h-2 bg-green-400 rounded-full"></div>';
+                        break;
+                    case 'error':
+                    case 'expired':
+                        statusClass = 'text-red-400';
+                        statusIcon = '<div class="w-2 h-2 bg-red-400 rounded-full"></div>';
+                        break;
+                    case 'connected':
+                        statusClass = 'text-green-400';
+                        statusIcon = '<div class="w-2 h-2 bg-green-400 rounded-full"></div>';
+                        if (statusElement) {
+                            statusElement.textContent = 'Connected';
+                            statusElement.className = 'bg-green-600/20 border border-green-500/30 text-green-400 text-xs px-2 py-1 rounded-full';
+                        }
+                        break;
+                    default:
+                        statusClass = 'text-gray-400';
+                        statusIcon = '<div class="w-2 h-2 bg-gray-400 rounded-full"></div>';
+                }
+                
+                statusDisplay.innerHTML = `
+                    <div class="flex items-center justify-center space-x-2">
+                        ${statusIcon}
+                        <span class="${statusClass} text-sm">${message}</span>
+                    </div>
+                `;
+            }
+        }
+        
+        // Show Authenticated Content in Wallet Drawer
+        function showAuthenticatedContent(authResult) {
+            // Update wallet state globally
+            window.walletConnected = true;
+            window.walletAddress = authResult.walletAddress;
+            
+            // Switch header to connected state
+            document.getElementById('wallet-connect-btn').style.display = 'none';
+            document.getElementById('wallet-connected-dropdown').classList.remove('hidden');
+            document.getElementById('mobile-wallet-btn').textContent = 'Hub';
+            document.getElementById('mobile-wallet-btn').onclick = function() { toggleWalletDrawer(); };
+            
+            // Update address displays
+            const shortAddress = authResult.walletAddress.substring(0, 6) + '...' + authResult.walletAddress.substring(-4);
+            document.getElementById('wallet-address-short').textContent = shortAddress;
+            document.getElementById('wallet-address-full').textContent = authResult.walletAddress;
+            
+            // Hide unauthenticated content in drawer
+            const unauthContent = document.querySelector('#wallet-drawer .bg-gradient-to-br.from-gray-800\\/60');
+            if (unauthContent) {
+                unauthContent.style.display = 'none';
+            }
+            
+            // Show authenticated content in drawer
+            const authContent = document.getElementById('authenticated-content');
+            if (authContent) {
+                authContent.style.display = 'block';
+                
+                // Update wallet address display
+                const walletDisplay = authContent.querySelector('.font-mono');
+                if (walletDisplay) {
+                    walletDisplay.textContent = shortAddress;
+                }
+            }
+            
+            // Update status in drawer
+            const authStatus = document.getElementById('auth-status');
+            if (authStatus) {
+                authStatus.textContent = 'Connected';
+                authStatus.className = 'bg-green-600/20 border border-green-500/30 text-green-400 text-xs px-2 py-1 rounded-full';
+            }
+        }
+        
+        // DEX-Style Wallet Dropdown Functions
+        function toggleWalletDropdown() {
+            const dropdown = document.getElementById('wallet-dropdown-menu');
+            dropdown.classList.toggle('hidden');
+            
+            // Close on outside click
+            if (!dropdown.classList.contains('hidden')) {
+                document.addEventListener('click', function(e) {
+                    if (!e.target.closest('#wallet-dropdown')) {
+                        dropdown.classList.add('hidden');
+                    }
+                }, { once: true });
+            }
+        }
+        
+        function copyWalletAddress() {
+            if (window.walletAddress) {
+                navigator.clipboard.writeText(window.walletAddress);
+                showToast('Address copied to clipboard', 'success');
+            }
+        }
+        
+        function viewOnBlockExplorer() {
+            if (window.walletAddress) {
+                window.open(`https://blockstream.info/address/${window.walletAddress}`, '_blank');
+            }
+        }
+        
+        function disconnectWallet() {
+            // Reset wallet state
+            window.walletConnected = false;
+            window.walletAddress = null;
+            
+            // Switch header back to disconnected state
+            document.getElementById('wallet-connect-btn').style.display = 'flex';
+            document.getElementById('wallet-connected-dropdown').classList.add('hidden');
+            document.getElementById('mobile-wallet-btn').textContent = 'Wallet';
+            document.getElementById('mobile-wallet-btn').onclick = function() { openWalletModal(); };
+            
+            // Hide dropdown
+            document.getElementById('wallet-dropdown-menu').classList.add('hidden');
+            
+            // Reset drawer to unauthenticated state
+            const unauthContent = document.querySelector('#wallet-drawer .bg-gradient-to-br.from-gray-800\\/60');
+            if (unauthContent) {
+                unauthContent.style.display = 'block';
+            }
+            
+            const authContent = document.getElementById('authenticated-content');
+            if (authContent) {
+                authContent.style.display = 'none';
+            }
+            
+            // Update status in drawer
+            const authStatus = document.getElementById('auth-status');
+            if (authStatus) {
+                authStatus.textContent = 'Disconnected';
+                authStatus.className = 'bg-gray-600/20 border border-gray-500/30 text-gray-400 text-xs px-2 py-1 rounded-full';
+            }
+            
+            showToast('Wallet disconnected', 'info');
+        }
+        
+        function generateAuthChallenge() {
+            return 'pool_' + Math.random().toString(36).substring(2) + '_' + Date.now();
+        }
+        
+        function regenerateQR() {
+            showToast('Generating new QR code...', 'info');
+            generateQRCode();
+        }
+        
+        function openMobileAppPage() {
+            window.open('https://apps.apple.com/app/blgv-btc', '_blank');
+        }
+        
+        function connectManualWallet() {
+            const address = document.getElementById('manual-bitcoin-address').value.trim();
+            
+            if (!address) {
+                showToast('Please enter a Bitcoin address', 'error');
+                return;
+            }
+            
+            if (!/^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,87}$/.test(address)) {
+                showToast('Invalid Bitcoin address format', 'error');
+                return;
+            }
+            
+            // Connect wallet using new state management
+            showConnectedWallet(address);
+            closeModal('wallet-modal');
+            showToast('Wallet connected successfully!', 'success');
         }
 
         // Mobile Menu Functions - Fixed viewport positioning
@@ -2067,6 +2886,56 @@ ordinals_mining: ${ordinals}
             showToast('Mining wallet address copied!', 'success');
         }
 
+        // Additional drawer functions
+        function disconnectWallet() {
+            if (confirm('Disconnect mining wallet? This will stop active mining operations.')) {
+                // Clear wallet connection
+                updateAuthStatus('disconnected');
+                
+                // Show notification
+                showToast('Wallet disconnected successfully', 'info');
+                
+                // Optionally redirect to setup
+                setTimeout(() => {
+                    showSection('setup');
+                    closeWalletDrawer();
+                }, 1500);
+            }
+        }
+
+        function copyMinerAddress() {
+            const address = document.getElementById('connected-wallet').textContent;
+            if (address && address !== 'bc1q...loading') {
+                navigator.clipboard.writeText(address).then(() => {
+                    showToast('Miner address copied to clipboard!', 'success');
+                });
+            } else {
+                showToast('No miner address available', 'error');
+            }
+        }
+
+        function viewMinerOnExplorer() {
+            const address = document.getElementById('connected-wallet').textContent;
+            if (address && address !== 'bc1q...loading') {
+                window.open(`https://blockstream.info/address/${address}`, '_blank');
+                showToast('Opening blockchain explorer...', 'info');
+            } else {
+                showToast('No miner address available', 'error');
+            }
+        }
+
+        function rentHashpower() {
+            showSection('marketplace');
+            closeWalletDrawer();
+            showToast('Opening hashpower marketplace...', 'info');
+        }
+
+        function offerHashpower() {
+            showSection('marketplace'); 
+            closeWalletDrawer();
+            showToast('Opening hashpower marketplace...', 'info');
+        }
+
         function viewOnExplorer() {
             showToast('Opening block explorer...', 'info');
             window.open('https://blockstream.info/address/bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh', '_blank');
@@ -2098,20 +2967,35 @@ ordinals_mining: ${ordinals}
             const statusElement = document.getElementById('auth-status');
             const walletElement = document.getElementById('connected-wallet');
             
-            if (status === 'connected') {
+            if (status === 'connected' && walletAddress) {
+                isAuthenticated = true;
+                currentWalletAddress = walletAddress;
+                
                 statusElement.textContent = 'Connected';
                 statusElement.className = 'bg-green-600/20 border border-green-500/30 text-green-400 text-xs px-2 py-1 rounded-full';
                 
-                if (walletAddress) {
-                    const shortAddress = walletAddress.slice(0, 6) + '...' + walletAddress.slice(-6);
-                    walletElement.textContent = shortAddress;
-                }
+                const shortAddress = walletAddress.slice(0, 6) + '...' + walletAddress.slice(-6);
+                walletElement.textContent = shortAddress;
+                
+                // Show authenticated content in drawer
+                showAuthenticatedContent();
+                
+                // Load user-specific mining data
+                loadUserMiningData(walletAddress);
                 
                 showToast('Mobile wallet connected successfully!', 'success');
             } else {
+                isAuthenticated = false;
+                currentWalletAddress = null;
+                
                 statusElement.textContent = 'Disconnected';
                 statusElement.className = 'bg-gray-600/20 border border-gray-500/30 text-gray-400 text-xs px-2 py-1 rounded-full';
                 walletElement.textContent = 'bc1q...loading';
+                
+                // Hide authenticated content in drawer
+                hideAuthenticatedContent();
+                
+                showToast('Mobile wallet disconnected', 'info');
             }
         }
 
@@ -2127,9 +3011,128 @@ ordinals_mining: ${ordinals}
             }, 300);
         }
 
+        // DEX-Style Section Toggle Functions
+        function toggleSection(sectionName) {
+            const section = document.getElementById(`${sectionName}-section`);
+            const chevron = document.getElementById(`${sectionName}-chevron`);
+            
+            if (section && chevron) {
+                if (section.classList.contains('hidden')) {
+                    section.classList.remove('hidden');
+                    chevron.classList.add('rotate-180');
+                } else {
+                    section.classList.add('hidden');
+                    chevron.classList.remove('rotate-180');
+                }
+            }
+        }
+        
+        // Wallet State Management
+        let walletConnected = false;
+        let connectedAddress = '';
+        
+        function showConnectedWallet(address) {
+            walletConnected = true;
+            connectedAddress = address;
+            
+            // Update wallet section in drawer
+            document.getElementById('disconnected-wallet').classList.add('hidden');
+            document.getElementById('connected-wallet').classList.remove('hidden');
+            document.getElementById('connected-wallet-address').textContent = formatAddress(address);
+            
+            // Update header wallet button
+            const headerWalletBtn = document.querySelector('.wallet-button');
+            if (headerWalletBtn) {
+                headerWalletBtn.innerHTML = `
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+                    </svg>
+                    <span class="hidden md:inline">Hub</span>
+                `;
+            }
+            
+            // Load user mining data
+            loadUserMiningData(address);
+        }
+        
+        function disconnectWallet() {
+            walletConnected = false;
+            connectedAddress = '';
+            
+            // Update wallet section in drawer
+            document.getElementById('connected-wallet').classList.add('hidden');
+            document.getElementById('disconnected-wallet').classList.remove('hidden');
+            
+            // Update header wallet button
+            const headerWalletBtn = document.querySelector('.wallet-button');
+            if (headerWalletBtn) {
+                headerWalletBtn.innerHTML = `
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+                    </svg>
+                    <span class="hidden md:inline">Wallet</span>
+                `;
+            }
+            
+            // Clear mining data
+            clearUserMiningData();
+            closeWalletDrawer();
+        }
+        
+        function formatAddress(address) {
+            if (!address) return '';
+            return address.length > 20 ? `${address.slice(0, 8)}...${address.slice(-8)}` : address;
+        }
+        
+        function copyWalletAddress() {
+            if (connectedAddress) {
+                navigator.clipboard.writeText(connectedAddress).then(() => {
+                    showToast('Address copied to clipboard', 'success');
+                });
+            }
+        }
+        
+        function viewOnExplorer() {
+            if (connectedAddress) {
+                window.open(`https://blockstream.info/address/${connectedAddress}`, '_blank');
+            }
+        }
+        
+        async function loadUserMiningData(address) {
+            try {
+                const response = await fetch(`/api/miner/${address}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    updateMiningDataInDrawer(data);
+                }
+            } catch (error) {
+                console.log('No mining data found for address');
+            }
+        }
+        
+        function updateMiningDataInDrawer(data) {
+            // Update earnings section with real data
+            if (data.earnings) {
+                document.querySelector('#earnings-section .text-white').textContent = data.earnings.total || '0.00';
+            }
+        }
+        
+        function clearUserMiningData() {
+            // Reset to default state
+            document.querySelector('#earnings-section .text-white').textContent = '0.00';
+        }
+
         // Close drawer when clicking overlay
         document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('drawer-overlay').addEventListener('click', closeWalletDrawer);
+            
+            // Initialize all sections as expanded (DEX default)
+            ['ecosystem', 'balances', 'mining', 'earnings'].forEach(section => {
+                const chevron = document.getElementById(`${section}-chevron`);
+                if (chevron) {
+                    chevron.classList.add('rotate-180');
+                }
+            });
         });
 
         function linkToDEX() {
@@ -2427,7 +3430,7 @@ def api_status():
         })
 
 @app.route('/api/pool/stats')
-def pool_stats():
+def pool_statistics():
     """Pool statistics for mobile app"""
     try:
         # Get comprehensive pool stats
@@ -2549,6 +3552,27 @@ def miners_register():
     except Exception as e:
         logger.error(f"Miner registration error: {e}")
         return jsonify({"error": "Registration failed"}), 500
+
+@app.route('/api/auth/check-status', methods=['POST'])
+def check_auth_status():
+    """Check authentication status for QR code polling"""
+    try:
+        data = request.get_json()
+        challenge = data.get('challenge')
+        
+        if not challenge:
+            return jsonify({'authenticated': False, 'error': 'No challenge provided'}), 400
+        
+        # In a real implementation, you'd check a database/cache for the challenge
+        # For now, return not authenticated to keep polling
+        return jsonify({
+            'authenticated': False,
+            'message': 'Waiting for mobile app authentication...'
+        })
+        
+    except Exception as e:
+        logging.error(f"Auth status check error: {e}")
+        return jsonify({'authenticated': False, 'error': 'Server error'}), 500
 
 @app.route('/api/auth/bitcoin-wallet', methods=['POST'])
 def auth_bitcoin_wallet():
@@ -2706,41 +3730,105 @@ def auth_page():
         let currentChallenge = null;
         
         function generateQRCode() {
-            currentChallenge = `BLGV-POOL-AUTH-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            // Clear any existing QR code
+            const qrContainer = document.getElementById('qr-code-container');
+            if (!qrContainer) {
+                console.error('QR container not found');
+                return;
+            }
             
-            const authData = {
-                platform: 'pool',
+            // Generate unique challenge
+            currentChallenge = `BLGV-AUTH-${Date.now()}-${Math.random().toString(36).substr(2, 15)}`;
+            
+            // Create authentication payload exactly like DEX
+            const authPayload = {
+                action: 'connect_wallet',
+                platform: 'mining_pool',
                 challenge: currentChallenge,
+                timestamp: Date.now(),
                 endpoint: `${window.location.origin}/api/auth/bitcoin-wallet`,
-                timestamp: Date.now()
+                expires: Date.now() + (5 * 60 * 1000) // 5 minutes
             };
             
-            const qrData = JSON.stringify(authData);
-            console.log('🔗 Generated QR data:', qrData);
+            console.log('Generating QR with payload:', authPayload);
             
-            QRCode.toCanvas(document.getElementById('qr-canvas'), qrData, {
-                width: 300,
-                margin: 2,
-                color: { dark: '#000000', light: '#ffffff' }
-            }, function(error) {
-                if (error) {
-                    console.error('QR generation error:', error);
-                    updateStatus('❌', 'QR Code generation failed', '#ef4444');
-                } else {
-                    console.log('✅ QR Code generated successfully');
-                    updateStatus('📱', 'Scan QR code with BLGV Mobile App', '#374151');
+            // Clear container and create canvas
+            qrContainer.innerHTML = '';
+            
+            try {
+                // Check if QRCode library is available
+                if (typeof QRCode === 'undefined') {
+                    throw new Error('QRCode library not loaded');
                 }
-            });
+                
+                // Create canvas element
+                const canvas = document.createElement('canvas');
+                canvas.style.width = '200px';
+                canvas.style.height = '200px';
+                qrContainer.appendChild(canvas);
+                
+                // Generate QR code using the library
+                QRCode.toCanvas(canvas, JSON.stringify(authPayload), {
+                    width: 200,
+                    height: 200,
+                    margin: 2,
+                    color: {
+                        dark: '#000000',
+                        light: '#ffffff'
+                    },
+                    errorCorrectionLevel: 'M'
+                }, function(error) {
+                    if (error) {
+                        console.error('QR generation failed:', error);
+                        // Fallback display
+                        qrContainer.innerHTML = `
+                            <div class="bg-white p-6 rounded-lg text-center text-black" style="width: 200px; height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                                <div class="text-2xl mb-2">📱</div>
+                                <div style="font-weight: 600; margin-bottom: 8px;">Mining Pool Auth</div>
+                                <div style="font-size: 12px; word-break: break-all;">${currentChallenge.substring(0, 15)}...</div>
+                            </div>
+                        `;
+                    } else {
+                        console.log('✅ QR Code generated successfully');
+                    }
+                });
+            }
             
             // Poll for authentication (simple version without WebSocket)
             checkAuthStatus();
         }
         
         function checkAuthStatus() {
-            // Simple polling - in production you'd use WebSocket
-            setTimeout(() => {
-                updateStatus('🔄', 'Waiting for mobile app authentication...', '#3b82f6');
-            }, 2000);
+            if (!currentChallenge) return;
+            
+            // Poll the auth status endpoint
+            fetch('/api/auth/check-status', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    challenge: currentChallenge
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.authenticated) {
+                    // Wallet authenticated successfully
+                    updateStatus('✅', 'Wallet connected successfully!', '#10b981');
+                    showConnectedWallet(data.wallet_address);
+                    closeModal('wallet-modal');
+                } else {
+                    // Continue polling
+                    updateStatus('🔄', 'Waiting for mobile app authentication...', '#3b82f6');
+                    setTimeout(checkAuthStatus, 3000); // Poll every 3 seconds
+                }
+            })
+            .catch(error => {
+                console.log('Auth polling error:', error);
+                updateStatus('⚠️', 'Connection error - retrying...', '#f59e0b');
+                setTimeout(checkAuthStatus, 5000); // Retry in 5 seconds
+            });
         }
         
         function updateStatus(icon, text, color) {
@@ -2771,7 +3859,7 @@ def stats():
             initialize_test_mining_data()
         
         # Get live Bitcoin price
-        btc_price = pool_stats['btc_price']
+        btc_price = 106234  # Default value
         try:
             import requests
             response = requests.get('https://api.coinbase.com/v2/exchange-rates?currency=BTC', timeout=2)
@@ -2791,8 +3879,8 @@ def stats():
             pass
 
         # Query real mining data from database
-        total_hashrate = pool_stats['total_hashrate']
-        active_miners = pool_stats['active_miners']
+        total_hashrate = pool_data['total_hashrate']
+        active_miners = pool_data['active_miners']
         
         try:
             import psycopg2
@@ -2828,12 +3916,12 @@ def stats():
         stats_data = {
             'pool_hashrate': total_hashrate,
             'active_miners': active_miners,
-            'total_shares': pool_stats['total_shares'],
-            'blocks_found': pool_stats['blocks_found'],
-            'network_difficulty': pool_stats['network_difficulty'],
+            'total_shares': pool_data['total_shares'],
+            'blocks_found': pool_data['blocks_found'],
+            'network_difficulty': pool_data['network_difficulty'],
             'btc_price': btc_price,
             'block_height': block_height,
-            'pool_fee': pool_stats['pool_fee'],
+            'pool_fee': pool_data['pool_fee'],
             'efficiency': 98.7,
             'uptime': 99.95,
             'stale_rate': 0.6,
