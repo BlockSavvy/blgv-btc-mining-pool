@@ -1586,31 +1586,7 @@ MINING_POOL_HTML = '''<!DOCTYPE html>
         </div>
     </div>
 
-            <!-- Mobile Wallet Connection -->
-            <div class="p-4 border-b border-gray-700/50">
-                <div class="bg-gradient-to-br from-gray-800/40 to-gray-900/20 border border-gray-600/30 rounded-lg p-4">
-                    <div class="flex items-center justify-between mb-3">
-                        <div class="flex items-center space-x-2">
-                            <svg class="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M7 4V2C7 1.45 7.45 1 8 1H16C16.55 1 17 1.45 17 2V4H20V6H4V4H7ZM8 3V4H16V3H8ZM19 8V21C19 21.55 18.55 22 18 22H6C5.45 22 5 21.55 5 21V8H19ZM8 10V20H10V10H8ZM12 10V20H14V10H12ZM16 10V20H18V10H16Z"/>
-                            </svg>
-                            <span class="text-gray-300 text-sm font-medium">Mobile Wallet</span>
-                        </div>
-                        <span id="auth-status" class="bg-gray-600/20 border border-gray-500/30 text-gray-400 text-xs px-2 py-1 rounded-full">Disconnected</span>
-                    </div>
-                    
-                    <button onclick="openWalletModal()" class="w-full bg-red-600/20 hover:bg-red-600/30 text-red-400 py-3 px-4 rounded-lg text-sm transition-colors flex items-center justify-center space-x-2 border border-red-500/30">
-                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M3 5v6h1l2 6h8l2-6h1V5H3zm2 10l-1-3h12l-1 3H5z"/>
-                        </svg>
-                        <span>Connect Mobile Wallet</span>
-                    </button>
-                    
-                    <div class="text-xs text-gray-400 mt-2 text-center">
-                        Scan QR code with BLGV Mobile App
-                    </div>
-                </div>
-            </div>
+
 
 
 
@@ -1630,9 +1606,7 @@ MINING_POOL_HTML = '''<!DOCTYPE html>
                             <h3 class="text-white font-semibold mb-2">Connect Your Wallet</h3>
                             <p class="text-gray-400 text-sm mb-4">Scan the QR code above with BLGV Mobile App to view your mining data, earnings, and performance metrics.</p>
                         </div>
-                        <button onclick="openWalletModal()" class="bg-red-600/20 hover:bg-red-600/30 text-red-400 py-2 px-4 rounded-lg text-sm transition-colors border border-red-500/30">
-                            Open QR Code
-                        </button>
+
                     </div>
 
                     <!-- Authenticated Content (Hidden by default) -->
